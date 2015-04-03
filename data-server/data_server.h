@@ -50,6 +50,10 @@ public:
   void
   init ();
 
+  /* a callback that will be called by the client_session when the data-server is successfully registered with the metadata-server */
+  void
+  registered (client_session_ptr client_session_ptr_, const system::error_code& err);
+
   /* join threads and wait to cleanup */
   void
   join ();
@@ -78,6 +82,7 @@ public:
   /* boost work to avoid premature destruction */
   work_ptr work_ptr_;
 
+  /* TODO: when remote endpoints disconnect session pointers must be reset and removed from the server_sessions vector */
   server_session_ptr new_server_session_ptr;
   vector<server_session_ptr> server_sessions;
 

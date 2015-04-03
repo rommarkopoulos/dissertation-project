@@ -4,11 +4,11 @@
 #define REGISTRATION_REQ 	0x00
 #define REGISTRATION_RESP 	0x01
 
-#define STORAGE_REQ 		0x02
-#define STORAGE_RESP 		0x03
+#define STORAGE_REQ 		0x05
+#define STORAGE_RESP 		0x06
 
-#define FETCH_REQ 		0x04
-#define FETCH_RESP 		0x05
+#define FETCH_REQ 		0x07
+#define FETCH_RESP 		0x08
 
 #define OK 			0x00
 

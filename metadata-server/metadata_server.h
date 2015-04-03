@@ -69,14 +69,14 @@ public:
   /* boost work to avoid premature destruction */
   work_ptr work_ptr_;
 
+  /* TODO: when remote endpoints disconnect session pointers must be reset and removed from the server_sessions vector */
   server_session_ptr new_server_session_ptr;
   vector<server_session_ptr> server_sessions;
 
   tcp::acceptor acceptor_;
   tcp::endpoint local_endpoint_;
 
-  /* metadata-server variables  */
-  /* TODO: romanos this must be guarded against concurrent usage*/
+  /* TODO: this must be guarded against concurrent usage */
   vector<tcp::endpoint> server_addresses;
   map<uint32_t, vector<tcp::endpoint> > filenames;
 };

@@ -2,6 +2,7 @@
 #define CLIENT_SESSION_H_
 
 #include <boost/asio.hpp>
+#include <boost/function.hpp>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -16,32 +17,39 @@ using namespace ip;
 
 using namespace std;
 
+class client_session;
+
+typedef shared_ptr<client_session> client_session_ptr;
+typedef function<void(client_session_ptr, const system::error_code&)> register_callback;
+
 class data_server;
 
-class client_session
+class client_session : public enable_shared_from_this<client_session>, private noncopyable
 {
 public:
-  client_session (tcp::endpoint &mds_endpoint, io_service& io_service, data_server *ds_);
+  client_session (io_service& io_service, data_server *ds_);
   ~client_session ();
 
   void
-  register_data_server (system::error_code &err);
+  connect (tcp::endpoint mds_endpoint_, system::error_code &err);
 
   void
-  write_registration_request ();
+  register_data_server (register_callback cb);
 
   void
-  registration_request_written (const system::error_code& err, size_t n, struct protocol_packet *request);
+  write_registration_request (register_callback cb);
 
   void
-  handle_header (const system::error_code& err, size_t n, struct protocol_packet *proto_pckt);
+  registration_request_written (const system::error_code& err, size_t n, struct protocol_packet *request, register_callback cb);
 
   void
-  handle_registration_response (const system::error_code& err, size_t n, protocol_packet *request);
+  handle_header (const system::error_code& err, size_t n, struct protocol_packet *proto_pckt, register_callback cb);
+
+  void
+  handle_registration_response (const system::error_code& err, size_t n, protocol_packet *request, register_callback cb);
 
   /* variables */
   data_server *ds_;
-  tcp::endpoint mds_endpoint_;
   tcp::socket socket_;
 };
 

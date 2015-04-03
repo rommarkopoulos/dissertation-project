@@ -46,20 +46,23 @@ public:
   registration_response_written (const system::error_code& err, size_t n, struct protocol_packet *response);
 
   void
-  handle_resolution_request (const system::error_code& err, size_t n, struct protocol_packet *request);
+  handle_storage_resolution_request (const system::error_code& err, size_t n, struct protocol_packet *request);
+
+  void
+  handle_fetch_resolution_request (const system::error_code& err, size_t n, struct protocol_packet *request);
 
   void
   write_resolution_response (vector<tcp::endpoint> &replication_addresses);
 
   void
-  resolution_response_written (const system::error_code& err, size_t n, struct protocol_packet *response);
+  resolution_response_written (const system::error_code& err, size_t n, struct protocol_packet *response, u_int8_t *replicas_data);
 
   /* random replication method */
   void
-  random_replication (uint32_t hash_code, uint32_t rep_num, vector<tcp::endpoint> &replication_addresses);
+  random_replication (uint32_t hash_code, u_int8_t replicas, vector<tcp::endpoint> &replication_addresses);
 
   /* variables */
-  metadata_server *mds_;
+  metadata_server *mds;
 
   tcp::socket socket_;
 };

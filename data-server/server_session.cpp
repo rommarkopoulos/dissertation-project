@@ -70,8 +70,7 @@ server_session::handle_header (const system::error_code& err, size_t n, protocol
 	break;
     }
   } else {
-    cout << err.message () << "\n";
-    // TODO: client disconnected - you need to (safely) remove the server_session from the map in the server
+    cout << "remote endpoint " << socket_.remote_endpoint() << " disconnected.." << "\n";
   }
 }
 
@@ -98,8 +97,7 @@ server_session::handle_storage_request (const system::error_code& err, size_t n,
   } else {
     /* free the data allocated before - I won't store anything */
     free(data);
-    cout << err.message () << "\n";
-    // TODO: client disconnected - you need to (safely) remove the server_session from the map in the server
+    cout << "remote endpoint " << socket_.remote_endpoint() << " disconnected.." << "\n";
   }
 }
 
@@ -127,7 +125,6 @@ server_session::storage_response_written (const system::error_code& err, size_t 
     read_header ();
   } else {
     cout << "server_session: error when writing storage response: " << err.message () << endl;
-    // TODO: client disconnected - you need to (safely) remove the server_session from the map in the server
   }
   free (response);
 }
@@ -157,8 +154,7 @@ server_session::handle_fetch_request (const system::error_code& err, size_t n, s
     free (request);
 
   } else {
-    cout << err.message () << "\n";
-    // TODO: client disconnected - you need to (safely) remove the server_session from the map in the server
+    cout << "remote endpoint " << socket_.remote_endpoint() << " disconnected.." << "\n";
   }
 }
 
@@ -193,7 +189,6 @@ server_session::fetch_response_written (const system::error_code& err, size_t n,
     read_header ();
   } else {
     cout << "server_session: error when writing fetch response: " << err.message () << endl;
-    // TODO: client disconnected - you need to (safely) remove the server_session from the map in the server
   }
   free (response);
 

@@ -10,7 +10,12 @@ data_server::data_server (string bind_address, uint16_t bind_port, string mds_ad
 void
 data_server::service_thread (io_service &service)
 {
-  service.run ();
+  try {
+    service.run ();
+  } catch (std::exception& e) {
+    cout << "ioservice exception was caught..not sure this is expected - re-running ioservice" << endl;
+    service.run ();
+  }
 }
 
 void
@@ -19,9 +24,8 @@ data_server::init ()
   system::error_code err;
   cout << "data_server: init()" << endl;
   /* start threads */
-  for (size_t i = 0; i < pool_size_; i++) {
+  for (size_t i = 0; i < pool_size_; i++)
     thread_grp_.create_thread (bind (&data_server::service_thread, this, ref (io_service_)));
-  }
 
   signals_.add (SIGINT);
   signals_.add (SIGTERM);
@@ -41,14 +45,34 @@ data_server::init ()
   acceptor_.async_accept (new_server_session_ptr->socket_, bind (&data_server::handle_accept, this, placeholders::error));
 
   /* create a client session with the metadata-server */
-  client_session_ptr_ = client_session_ptr (new client_session (mds_endpoint_, io_service_, this));
-  client_session_ptr_->register_data_server (err);
+  client_session_ptr_ = client_session_ptr (new client_session (io_service_, this));
+
+  /* this is synchronous to avoid several complications*/
+  client_session_ptr_->connect (mds_endpoint_, err);
   if (err) {
     /* cannot continue here..could not register with metadata-server */
+    cout << "data-server: " << err.message () << endl;
     acceptor_.close ();
     signals_.cancel ();
     work_ptr_.reset ();
+  } else {
+    /* I use my own callback here _1 and _2 are like the boost::placeholders stuff */
+    client_session_ptr_->register_data_server (bind (&data_server::registered, this, _1, _2));
   }
+}
+
+void
+data_server::registered (client_session_ptr client_session_ptr_, const system::error_code& err)
+{
+  if (!err) {
+    /* successful */
+    cout << "data_server: registered with metadata server (remote endpoint " << client_session_ptr_->socket_.remote_endpoint () << ")" << endl;
+  } else {
+    /* errors should be handled in such callbacks in general */
+  }
+
+  /* close client session with metadata server */
+  client_session_ptr_->socket_.close ();
 }
 
 void
@@ -63,12 +87,11 @@ void
 data_server::handle_stop ()
 {
   cout << "data_server: handle_stop()" << endl;
-  work_ptr_.reset ();
   io_service_.stop ();
 }
 
 void
-data_server::handle_accept (const boost::system::error_code& err)
+data_server::handle_accept (const system::error_code& err)
 {
   if (!err) {
     new_server_session_ptr->start ();

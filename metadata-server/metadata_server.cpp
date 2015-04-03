@@ -4,12 +4,18 @@ metadata_server::metadata_server (string ip_address, uint32_t port, size_t pool_
     pool_size_ (pool_size), signals_ (io_service_), acceptor_ (io_service_), work_ptr_ (new io_service::work (io_service_)), local_endpoint_ (ip_v4::from_string (ip_address), port)
 {
   cout << "metadata_server: constructor()" << endl;
+  srand ((unsigned int) time (NULL));
 }
 
 void
 metadata_server::service_thread (io_service &service)
 {
-  service.run ();
+  try {
+    service.run ();
+  } catch (std::exception& e) {
+    cout << "ioservice exception was caught..not sure this is expected - re-running ioservice" << endl;
+    service.run ();
+  }
 }
 
 void
@@ -35,6 +41,7 @@ metadata_server::init ()
   acceptor_.listen ();
 
   new_server_session_ptr = server_session_ptr (new server_session (io_service_, this));
+  /* TODO: at some point, these must be removed when client and data servers disconnect */
   server_sessions.push_back (new_server_session_ptr);
   acceptor_.async_accept (new_server_session_ptr->socket_, bind (&metadata_server::handle_accept, this, placeholders::error));
 }
@@ -51,21 +58,22 @@ void
 metadata_server::handle_stop ()
 {
   cout << "metadata_server: handle_stop()" << endl;
-  work_ptr_.reset ();
-  io_service_.stop ();
+  io_service_.stop();
 }
 
 void
-metadata_server::handle_accept (const system::error_code& error)
+metadata_server::handle_accept (const system::error_code& err)
 {
-  if (!error) {
+  if (!err) {
     new_server_session_ptr->start ();
     cout << "metadata-server: client connected" << endl;
+    new_server_session_ptr = server_session_ptr (new server_session (io_service_, this));
+    /* TODO: at some point, these must be removed when client and data servers disconnect */
+    server_sessions.push_back (new_server_session_ptr);
+    acceptor_.async_accept (new_server_session_ptr->socket_, bind (&metadata_server::handle_accept, this, placeholders::error));
+  } else {
+    cout << "data_server: acceptor error: " << err.message () << endl;
   }
-
-  new_server_session_ptr = server_session_ptr (new server_session (io_service_, this));
-  server_sessions.push_back (new_server_session_ptr);
-  acceptor_.async_accept (new_server_session_ptr->socket_, bind (&metadata_server::handle_accept, this, placeholders::error));
 }
 
 metadata_server::~metadata_server (void)

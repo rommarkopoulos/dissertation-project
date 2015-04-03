@@ -7,7 +7,7 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR AND NOT MSVC_IDE )
 message(FATAL_ERROR "In-source builds are not allowed. Create a directory and run cmake from there, passing the path to this source directory.")
 endif()
 
-find_package(Boost COMPONENTS system)
+find_package(Boost COMPONENTS system thread)
 
 # set_property(TARGET blackadder PROPERTY POSITION_INDEPENDENT_CODE ON)
 
@@ -22,7 +22,7 @@ add_custom_target(uninstall
     
 if(Boost_FOUND)
 
-  set(CLIENT-SRC )
+  set(CLIENT-SRC client_session.cpp client.cpp main.cpp)
   
   add_executable (storage-client ${CLIENT-SRC})
   include_directories(${Boost_INCLUDE_DIRS})
