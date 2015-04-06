@@ -260,7 +260,7 @@ client::generate_hash_code (string s)
   hash<std::string> string_hash;
   std::size_t hash_value = string_hash (s);
 
-  cout << "client::generate_hash_code: name " << s << " hashed to " << hash_value << endl;
+  cout << "client::generate_hash_code: name " << s << " hashed to " << static_cast<uint32_t> (hash_value) << endl;
 
   return static_cast<uint32_t> (hash_value);
 }

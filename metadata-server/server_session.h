@@ -18,53 +18,60 @@ using namespace std;
 
 class metadata_server;
 
-class server_session : public enable_shared_from_this<server_session>, private noncopyable
-{
+class server_session: public enable_shared_from_this<server_session>,
+		private noncopyable {
 public:
 
-  server_session (io_service& io_service, metadata_server *mds);
-  ~server_session (void);
+	server_session(io_service& io_service, metadata_server *mds);
+	~server_session(void);
 
-  void
-  start ();
+	void
+	start();
 
-  /* read header */
-  void
-  read_header ();
+	/* read header */
+	void
+	read_header();
 
-  /* read body */
-  void
-  handle_header (const system::error_code& err, size_t n, protocol_packet *proto_pckt);
+	/* read body */
+	void
+	handle_header(const system::error_code& err, size_t n,
+			protocol_packet *proto_pckt);
 
-  void
-  handle_registration_request (const system::error_code& err, size_t n, struct protocol_packet *request);
+	void
+	handle_registration_request(const system::error_code& err, size_t n,
+			struct protocol_packet *request);
 
-  void
-  write_registration_response ();
+	void
+	write_registration_response();
 
-  void
-  registration_response_written (const system::error_code& err, size_t n, struct protocol_packet *response);
+	void
+	registration_response_written(const system::error_code& err, size_t n,
+			struct protocol_packet *response);
 
-  void
-  handle_storage_resolution_request (const system::error_code& err, size_t n, struct protocol_packet *request);
+	void
+	handle_storage_resolution_request(const system::error_code& err, size_t n,
+			struct protocol_packet *request);
 
-  void
-  handle_fetch_resolution_request (const system::error_code& err, size_t n, struct protocol_packet *request);
+	void
+	handle_fetch_resolution_request(const system::error_code& err, size_t n,
+			struct protocol_packet *request);
 
-  void
-  write_resolution_response (vector<tcp::endpoint> &replication_addresses);
+	void
+	write_resolution_response(vector<tcp::endpoint> &replication_addresses);
 
-  void
-  resolution_response_written (const system::error_code& err, size_t n, struct protocol_packet *response, u_int8_t *replicas_data);
+	void
+	resolution_response_written(const system::error_code& err, size_t n,
+			struct protocol_packet *response, u_int8_t *replicas_data);
 
-  /* random replication method */
-  void
-  random_replication (uint32_t hash_code, u_int8_t replicas, vector<tcp::endpoint> &replication_addresses);
+	/* random replication method */
+	void
+	random_replication(uint32_t hash_code, u_int8_t replicas,
+			vector<tcp::endpoint> &replication_addresses);
 
-  /* variables */
-  metadata_server *mds;
+	/* variables */
+	metadata_server *mds;
 
-  tcp::socket socket_;
+	tcp::socket socket_;
 };
 
 #endif /* server_session_ */

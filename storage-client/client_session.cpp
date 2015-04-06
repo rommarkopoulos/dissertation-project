@@ -115,7 +115,6 @@ client_session::handle_resolution_payload_response (const system::error_code& er
 {
   uint32_t addr;
   uint16_t port;
-
   vector<tcp::endpoint> endpoints;
 
   if (!err) {
@@ -141,8 +140,78 @@ client_session::handle_resolution_payload_response (const system::error_code& er
 /* storage-related methods */
 void
 client_session::send_storage_request (uint32_t hash_code, char * data, u_int32_t length, storage_data_callback storage_data_cb) {
-  /* TODO pass the callback to all handlers until the the response is fully received - then call callback */
-  storage_data_cb(system::error_code (system::errc::protocol_error, system::errno_ecat));
+
+	struct protocol_packet *request = (struct protocol_packet *) malloc (sizeof(struct protocol_packet));
+
+	request->hdr.payload_length = sizeof(request->payload.storage_req) + length;
+	request->hdr.type = STORAGE_REQ;
+
+	request->payload.storage_req.hash_code = hash_code;
+
+	vector<boost::asio::mutable_buffer> buffer_store;
+
+	buffer_store.push_back(boost::asio::buffer(request, sizeof(request->hdr) + sizeof(request->hdr.payload_length)));
+	buffer_store.push_back(boost::asio::buffer(data, length));
+
+	async_write(socket_, buffer_store,
+			bind(&client_session::send_storage_request_written, this, placeholders::error, placeholders::bytes_transferred, request, storage_data_cb));
+
+	/* TODO pass the callback to all handlers until the the response is fully received - then call callback */
+
+}
+
+void
+client_session::send_storage_request_written (const system::error_code& err, size_t n, struct protocol_packet *request, storage_data_callback storage_data_cb) {
+
+	if(!err){
+
+		cout << "client_session: receiving response's header" << endl;
+
+		struct protocol_packet *response = (struct protocol_packet *) malloc (sizeof(struct protocol_packet));
+
+		async_read (socket_, buffer (&response->hdr, sizeof(response->hdr)),
+				bind (&client_session::handle_send_storage_reuqest_response_header, this, placeholders::error, placeholders::bytes_transferred, response, storage_data_cb));
+
+	}
+	else{
+		cout <<  "should not happen" << endl;
+	}
+
+	free(request);
+}
+
+void
+client_session::handle_send_storage_reuqest_response_header(const system::error_code& err, size_t n, struct protocol_packet *response ,storage_data_callback storage_data_cb){
+	if(!err){
+
+		cout << "client_session: receiving response's body" << endl;
+
+		cout << "client_session: payload length: " << response->hdr.payload_length << endl;
+
+		cout << "client_session: request type: " << (int)response->hdr.type << endl;
+
+		if(response->hdr.type == STORAGE_RESP){
+			async_read (socket_, buffer(&response->payload.storage_resp, response->hdr.payload_length),
+					bind (&client_session::handle_send_storage_request_response, this, placeholders::error, placeholders::bytes_transferred, response, storage_data_cb));
+		}
+		else{
+			cout << "/* that's severe - it shouldn't happen*/" << endl;
+		}
+	}
+
+}
+
+void
+client_session::handle_send_storage_request_response(const system::error_code& err, size_t n, struct protocol_packet *response, storage_data_callback storage_data_cb){
+	if(!err){
+		cout << "client_session: Response: hash_code: " <<  response->payload.storage_resp.hash_code << ". STATUS: " << (int)response->payload.storage_resp.response << endl;
+		/* TODO call the callback */
+	}
+	else{
+		cout <<  "should not happen" << endl;
+		storage_data_cb(system::error_code (system::errc::protocol_error, system::errno_ecat));
+	}
+	free(response);
 }
 
 /* fetch-related methods */

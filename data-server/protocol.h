@@ -14,57 +14,57 @@
 
 struct __attribute__((__packed__)) header
 {
-  uint32_t payload_length;
-  uint8_t type;
+	uint32_t payload_length;
+	uint8_t type;
 };
 
 struct __attribute__((__packed__)) registration_request
 {
-  uint32_t addr;		/* IP address in network order*/
-  uint16_t port;		/* Port number */
+	uint32_t addr;		/* IP address in network order*/
+	uint16_t port;		/* Port number */
 };
 
 struct __attribute__((__packed__)) registration_response
 {
-  uint8_t response; 	// always OK
+	uint8_t response; 	// always OK
 };
 
 struct __attribute__((__packed__)) storage_request
 {
-  uint32_t hash_code;
-  /* data will be allocated and read separately */
+	uint32_t hash_code;
+	/* data will be allocated and read separately */
 };
 
 struct __attribute__((__packed__)) storage_response
 {
-  uint32_t hash_code;	// so that the client can know which data it refers to
-  uint8_t response; 	// always OK
+	uint32_t hash_code;	// so that the client can know which data it refers to
+	uint8_t response; 	// always OK
 };
 
 struct __attribute__((__packed__)) fetch_request
 {
-  uint32_t hash_code;
+	uint32_t hash_code;
 };
 
 struct __attribute__((__packed__)) fetch_response
 {
-  uint32_t hash_code;	// so that the client can know which data it refers to
-  /* data will be allocated and read separately */
+	uint32_t hash_code;	// so that the client can know which data it refers to
+	/* data will be allocated and read separately */
 };
 
 struct __attribute__((__packed__)) protocol_packet
 {
-  struct header hdr;
+	struct header hdr;
 
-  union
-  {
-    struct registration_request registration_req;
-    struct registration_response registration_resp;
-    struct storage_request storage_req;
-    struct storage_response storage_resp;
-    struct fetch_request fetch_req;
-    struct fetch_response fetch_resp;
-  } payload;
+	union
+	{
+		struct registration_request registration_req;
+		struct registration_response registration_resp;
+		struct storage_request storage_req;
+		struct storage_response storage_resp;
+		struct fetch_request fetch_req;
+		struct fetch_response fetch_resp;
+	} payload;
 };
 
 #endif
