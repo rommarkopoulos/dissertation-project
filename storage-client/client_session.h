@@ -77,9 +77,17 @@ public:
   handle_send_storage_request_response(const system::error_code& err, size_t n, struct protocol_packet *response, storage_data_callback storage_data_cb);
 
   /* fetch-related methods */
-
   void
   send_fetch_request (uint32_t hash_code, fetch_data_callback fetch_data_cb);
+
+  void
+  send_fetch_request_written(const system::error_code& err, size_t n, struct protocol_packet *request, fetch_data_callback fetch_data_cb);
+
+  void
+  handle_send_fetch_request_response_header(const system::error_code& err, size_t n, struct protocol_packet *response , fetch_data_callback fetch_data_cb);
+
+  void
+  handle_send_fetch_reqeust_response(const system::error_code& err, size_t n, struct protocol_packet *response ,char* data, uint32_t data_length, fetch_data_callback fetch_data_cb);
 
   /* variables */
   client *client_;

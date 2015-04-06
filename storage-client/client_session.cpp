@@ -165,7 +165,7 @@ client_session::send_storage_request_written (const system::error_code& err, siz
 
 	if(!err){
 
-		cout << "client_session: receiving response's header" << endl;
+		cout << "client_session: receiving storage_request response's header" << endl;
 
 		struct protocol_packet *response = (struct protocol_packet *) malloc (sizeof(struct protocol_packet));
 
@@ -175,6 +175,7 @@ client_session::send_storage_request_written (const system::error_code& err, siz
 	}
 	else{
 		cout <<  "should not happen" << endl;
+		/*TODO add storage_data_cb*/
 	}
 
 	free(request);
@@ -184,7 +185,7 @@ void
 client_session::handle_send_storage_reuqest_response_header(const system::error_code& err, size_t n, struct protocol_packet *response ,storage_data_callback storage_data_cb){
 	if(!err){
 
-		cout << "client_session: receiving response's body" << endl;
+		cout << "client_session: receiving storage_request response's body" << endl;
 
 		cout << "client_session: payload length: " << response->hdr.payload_length << endl;
 
@@ -197,6 +198,10 @@ client_session::handle_send_storage_reuqest_response_header(const system::error_
 		else{
 			cout << "/* that's severe - it shouldn't happen*/" << endl;
 		}
+	}
+	else{
+		cout <<  "should not happen" << endl;
+		/*TODO add storage_data_cb*/
 	}
 
 }
@@ -217,10 +222,93 @@ client_session::handle_send_storage_request_response(const system::error_code& e
 /* fetch-related methods */
 void
 client_session::send_fetch_request (uint32_t hash_code, fetch_data_callback fetch_data_cb) {
-  /* TODO pass the callback to all handlers until the the response is fully received - then call callback */
+  /* TODO pass the callback to all handlers until the the response is fully received - then call callback
   u_int32_t dummy_length = 1000;
   char *dummy_data = (char *) malloc(dummy_length);
-  fetch_data_cb(system::error_code (system::errc::protocol_error, system::errno_ecat), dummy_data, dummy_length);
+  fetch_data_cb(system::error_code (system::errc::protocol_error, system::errno_ecat), dummy_data, dummy_length);*/
+	struct protocol_packet *request = (struct protocol_packet *) malloc (sizeof(struct protocol_packet));
+
+	request->hdr.payload_length = sizeof(request->payload.fetch_req);
+	request->hdr.type = FETCH_REQ;
+
+	request->payload.fetch_req.hash_code = hash_code;
+
+	async_write(socket_, buffer(request, sizeof(request->hdr) + sizeof(request->hdr.payload_length)),
+				bind(&client_session::send_fetch_request_written, this, placeholders::error, placeholders::bytes_transferred, request, fetch_data_cb));
+
+}
+
+void
+client_session::send_fetch_request_written(const system::error_code& err, size_t n, struct protocol_packet *request, fetch_data_callback fetch_data_cb)
+{
+	if(!err){
+
+		cout << "client_session: receiving storage_request response's header" << endl;
+
+		struct protocol_packet *response = (struct protocol_packet *) malloc (sizeof(struct protocol_packet));
+		async_read (socket_, buffer (&response->hdr, sizeof(response->hdr)),
+						bind (&client_session::handle_send_fetch_request_response_header, this, placeholders::error, placeholders::bytes_transferred, response, fetch_data_cb));
+	}
+	else{
+		cout <<  "should not happen" << endl;
+		/*TODO add fetch_data_cb*/
+	}
+
+	free(request);
+
+}
+
+void
+client_session::handle_send_fetch_request_response_header(const system::error_code& err, size_t n, struct protocol_packet *response , fetch_data_callback fetch_data_cb)
+{
+	if(!err){
+		cout << (int) response->hdr.type;
+		if(response->hdr.type == FETCH_RESP){
+
+			cout << "client_session: receiving storage_request response's body" << endl;
+			cout << "client_session: payload length: " << response->hdr.payload_length << endl;
+
+			uint32_t data_length = response->hdr.payload_length - sizeof(response->payload.fetch_resp);
+
+			cout <<"client_session: data length: " << data_length << endl;
+			cout << "client_session: request type: " << (int)response->hdr.type << endl;
+
+			char* data = (char *) malloc (data_length);
+
+			array<mutable_buffer, 2> buffer_array =
+			{
+					buffer (&response->payload.fetch_req, sizeof(response->payload.fetch_req)),
+					buffer (data, data_length)
+			};
+
+			async_read (socket_, buffer_array,
+					bind (&client_session::handle_send_fetch_reqeust_response, this, placeholders::error, placeholders::bytes_transferred, response, data, data_length, fetch_data_cb));
+
+		}
+		else{
+			cout << "/* that's severe - it shouldn't happen*/" << endl;
+		}
+	}
+	else{
+		cout <<  "should not happen" << endl;
+		/*TODO add fetch_data_cb*/
+	}
+
+}
+
+void
+client_session::handle_send_fetch_reqeust_response(const system::error_code& err, size_t n, struct protocol_packet *response ,char* data, uint32_t data_length, fetch_data_callback fetch_data_cb)
+{
+	if(!err){
+
+		cout << "client_session: Hash Code of data: " << response->payload.fetch_req.hash_code << endl;
+		cout << "client_session: Response: data length: " << data_length << endl;
+
+	}
+	else{
+		fetch_data_cb(system::error_code (system::errc::protocol_error, system::errno_ecat), data, data_length);
+	}
+	free(response);
 }
 
 /* destructor */

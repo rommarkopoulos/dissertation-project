@@ -146,6 +146,7 @@ server_session::handle_fetch_request (const system::error_code& err, size_t n, s
 	if (!err) {
 		cout << "server_session: successfully read fetch request payload(" << n << " bytes)" << endl;
 
+
 		struct fetch_request *fetch_req = &request->payload.fetch_req;
 		map<uint32_t, stored_data>::iterator iter = ds_->storage.find (fetch_req->hash_code);
 		if (iter != ds_->storage.end ()) {
@@ -172,7 +173,7 @@ server_session::write_fetch_response (uint32_t hash_code, char *data, uint32_t d
 
 	struct protocol_packet *response = (struct protocol_packet *) malloc (sizeof(struct protocol_packet));
 
-	response->hdr.payload_length = data_length;
+	response->hdr.payload_length = sizeof(response->payload.fetch_resp) + data_length;
 	response->hdr.type = FETCH_RESP;
 
 	response->payload.fetch_resp.hash_code = hash_code;
