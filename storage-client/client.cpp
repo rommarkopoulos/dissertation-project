@@ -55,6 +55,7 @@ client::join ()
   cout << "client: join()" << endl;
   thread_grp_.join_all ();
 
+
   /* close the socket to the mds and reset the shared_ptr */
   if (!metadata_session) {
     metadata_session->socket_.close ();
@@ -111,8 +112,9 @@ void
 client::storage_dataservers_resolved (const system::error_code& err, vector<tcp::endpoint> &endpoints, u_int32_t hash_code, char* data, uint32_t length, storage_callback storage_cb)
 {
   if (!err) {
-    cout << "client: storage_dataservers_resolved" << endl;
+
     if (endpoints.size () > 0) {
+
       /* for each endpoint, send a storage request */
       vector<tcp::endpoint>::iterator endpoints_iter;
       shared_ptr<u_int8_t> replicas_ptr (new u_int8_t (endpoints.size ()));
@@ -153,7 +155,11 @@ client::storage_dataservers_resolved (const system::error_code& err, vector<tcp:
 	    return;
 	  }
 	} else {
+
+	  /*PROBLEM WAS HERE BECAUSE WE DID NOT ULOCKED THE LOCK IN THE ELSE STATEMENT AT ALL */
+	  data_sessions_mutex.unlock();
 	  data_session = data_sessions_iterator->second;
+
 	}
 	/* send the storage request to the data server */
 	data_session->send_storage_request (hash_code, data, length, bind (&client::storage_request_written, this, _1, replicas_ptr, hash_code, storage_cb));
@@ -225,6 +231,8 @@ client::fetch_dataservers_resolved (const system::error_code& err, vector<tcp::e
 	  return;
 	}
       } else {
+	/*PROBLEM WAS HERE BECAUSE WE DID NOT ULOCKED THE LOCK IN THE ELSE STATEMENT AT ALL */
+	data_sessions_mutex.unlock ();
 	data_session = data_sessions_iterator->second;
       }
 

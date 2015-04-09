@@ -1,23 +1,38 @@
 #include "client_session.h"
 
 client_session::client_session (io_service& io_service, client *client_) :
-    socket_ (io_service), client_ (client_)
+    socket_ (io_service), strand_ (io_service), client_ (client_)
 {
   cout << "client_session: constructor()" << endl;
+  is_pending = false;
 }
 
 void
 client_session::connect (tcp::endpoint remote_endpoint_, system::error_code &err)
 {
+
   socket_.connect (remote_endpoint_, err);
 }
 
 /* resolution-related methods */
-
 void
 client_session::resolve_dataservers_storage (uint32_t hash_code, u_int8_t replicas, resolution_callback resolution_cb)
 {
-  write_storage_resolution_request (hash_code, replicas, resolution_cb);
+
+  is_pending_mutex.lock ();
+
+  if (is_pending == false) {
+    cout << "client_session: " << socket_.remote_endpoint () << " ENTER CRITICAL AREA - RESOLUTION" << endl;
+    is_pending = true;
+    is_pending_mutex.unlock ();
+    strand_.post (bind (&client_session::write_storage_resolution_request, this, hash_code, replicas, resolution_cb));
+  } else {
+    cout << "client_session: " << socket_.remote_endpoint () << " Retrying to ENTER CRITICAL AREA - RESOLUTION" << endl;
+
+    is_pending_mutex.unlock ();
+    strand_.post (bind (&client_session::resolve_dataservers_storage, this, hash_code, replicas, resolution_cb));
+
+  }
 }
 
 void
@@ -33,14 +48,14 @@ client_session::write_storage_resolution_request (uint32_t hash_code, u_int8_t r
   request->payload.storage_resolution_req.replication_factor = replicas;
 
   async_write (socket_, buffer (request, sizeof(request->hdr) + request->hdr.payload_length),
-	       bind (&client_session::storage_resolution_request_written, this, placeholders::error, placeholders::bytes_transferred, request, resolution_cb));
+	       strand_.wrap (bind (&client_session::storage_resolution_request_written, this, placeholders::error, placeholders::bytes_transferred, request, resolution_cb)));
 }
 
 void
 client_session::storage_resolution_request_written (const system::error_code& err, size_t n, struct protocol_packet *request, resolution_callback resolution_cb)
 {
   if (!err) {
-    read_resolution_response_header (resolution_cb);
+    strand_.post (bind (&client_session::read_resolution_response_header, this, resolution_cb));
   } else {
     /* error control through calling resolution callback */
     vector<tcp::endpoint> empty_vector;
@@ -52,7 +67,15 @@ client_session::storage_resolution_request_written (const system::error_code& er
 void
 client_session::resolve_dataservers_fetch (uint32_t hash_code, resolution_callback resolution_cb)
 {
-  write_fetch_resolution_request (hash_code, resolution_cb);
+  is_pending_mutex.lock ();
+  if (is_pending == false) {
+    is_pending = true;
+    is_pending_mutex.unlock ();
+    strand_.post (bind (&client_session::write_fetch_resolution_request, this, hash_code, resolution_cb));
+  } else {
+    is_pending_mutex.unlock ();
+    strand_.post (bind (&client_session::resolve_dataservers_fetch, this, hash_code, resolution_cb));
+  }
 }
 
 void
@@ -67,14 +90,14 @@ client_session::write_fetch_resolution_request (uint32_t hash_code, resolution_c
   request->payload.fetch_resolution_req.hash_code = hash_code;
 
   async_write (socket_, buffer (request, sizeof(request->hdr) + request->hdr.payload_length),
-	       bind (&client_session::fetch_resolution_request_written, this, placeholders::error, placeholders::bytes_transferred, request, resolution_cb));
+	       strand_.wrap (bind (&client_session::fetch_resolution_request_written, this, placeholders::error, placeholders::bytes_transferred, request, resolution_cb)));
 }
 
 void
 client_session::fetch_resolution_request_written (const system::error_code& err, size_t n, struct protocol_packet *request, resolution_callback resolution_cb)
 {
   if (!err) {
-    read_resolution_response_header (resolution_cb);
+    strand_.post (bind (&client_session::read_resolution_response_header, this, resolution_cb));
   } else {
     /* error control through calling resolution callback */
     vector<tcp::endpoint> empty_vector;
@@ -89,7 +112,7 @@ client_session::read_resolution_response_header (resolution_callback resolution_
   struct protocol_packet *response = (struct protocol_packet *) malloc (sizeof(struct protocol_packet) + 0 /* resolution response is empty - will read endpoints separately */);
 
   async_read (socket_, buffer (response, sizeof(response->hdr)),
-	      bind (&client_session::handle_resolution_response_header, this, placeholders::error, placeholders::bytes_transferred, response, resolution_cb));
+	      strand_.wrap (bind (&client_session::handle_resolution_response_header, this, placeholders::error, placeholders::bytes_transferred, response, resolution_cb)));
 }
 
 void
@@ -98,9 +121,9 @@ client_session::handle_resolution_response_header (const system::error_code& err
   if (!err) {
     /* make sure the type is correct */
     if (response->hdr.type == RESOLUTION_RESP) {
-	u_int8_t *replicas_data = (u_int8_t *) malloc (response->hdr.payload_length);
-	async_read (socket_, buffer (replicas_data, response->hdr.payload_length),
-		    bind (&client_session::handle_resolution_payload_response, this, placeholders::error, placeholders::bytes_transferred, response, replicas_data, resolution_cb));
+      u_int8_t *replicas_data = (u_int8_t *) malloc (response->hdr.payload_length);
+      async_read (socket_, buffer (replicas_data, response->hdr.payload_length),
+		  strand_.wrap (bind (&client_session::handle_resolution_payload_response, this, placeholders::error, placeholders::bytes_transferred, response, replicas_data, resolution_cb)));
     } else {
       cout << "/* that's severe - it shouldn't happen*/" << endl;
     }
@@ -127,6 +150,11 @@ client_session::handle_resolution_payload_response (const system::error_code& er
 
       tcp::endpoint temp_endpoint (ip::address_v4 (addr), port);
       endpoints.push_back (temp_endpoint);
+
+      is_pending_mutex.lock ();
+      is_pending = false;
+      cout << "client_session: " << socket_.remote_endpoint () << " LEAVING CRITICAL AREA - RESOLUTION" << endl;
+      is_pending_mutex.unlock ();
     }
     resolution_cb (err, endpoints);
   } else {
@@ -139,176 +167,204 @@ client_session::handle_resolution_payload_response (const system::error_code& er
 
 /* storage-related methods */
 void
-client_session::send_storage_request (uint32_t hash_code, char * data, u_int32_t length, storage_data_callback storage_data_cb) {
+client_session::send_storage_request (uint32_t hash_code, char * data, u_int32_t length, storage_data_callback storage_data_cb)
+{
 
-	struct protocol_packet *request = (struct protocol_packet *) malloc (sizeof(struct protocol_packet));
+  is_pending_mutex.lock ();
 
-	request->hdr.payload_length = sizeof(request->payload.storage_req) + length;
-	request->hdr.type = STORAGE_REQ;
+  if (is_pending == false) {
+    cout << "client_session: " << socket_.remote_endpoint () << " ENTER CRITICAL AREA - STORAGE" << endl;
+    is_pending = true;
+    is_pending_mutex.unlock ();
+    struct protocol_packet *request = (struct protocol_packet *) malloc (sizeof(struct protocol_packet));
 
-	request->payload.storage_req.hash_code = hash_code;
+    request->hdr.payload_length = sizeof(request->payload.storage_req) + length;
+    request->hdr.type = STORAGE_REQ;
 
-	vector<boost::asio::mutable_buffer> buffer_store;
+    request->payload.storage_req.hash_code = hash_code;
 
-	buffer_store.push_back(boost::asio::buffer(request, sizeof(request->hdr) + sizeof(request->hdr.payload_length)));
-	buffer_store.push_back(boost::asio::buffer(data, length));
+    vector<boost::asio::mutable_buffer> buffer_store;
 
-	async_write(socket_, buffer_store,
-			bind(&client_session::send_storage_request_written, this, placeholders::error, placeholders::bytes_transferred, request, storage_data_cb));
+    buffer_store.push_back (boost::asio::buffer (request, sizeof(request->hdr) + sizeof(request->hdr.payload_length)));
+    buffer_store.push_back (boost::asio::buffer (data, length));
 
-	/* TODO pass the callback to all handlers until the the response is fully received - then call callback */
+    strand_.post (bind (&client_session::send_storage_request_helper, this, buffer_store, request, storage_data_cb));
+  } else {
+    cout << "client_session: " << socket_.remote_endpoint () << " Retrying to ENTER CRITICAL AREA - STORAGE" << endl;
+    is_pending_mutex.unlock ();
+    strand_.post (bind (&client_session::send_storage_request, this, hash_code, data, length, storage_data_cb));
+  }
 
-}
-
-void
-client_session::send_storage_request_written (const system::error_code& err, size_t n, struct protocol_packet *request, storage_data_callback storage_data_cb) {
-
-	if(!err){
-
-		cout << "client_session: receiving storage_request response's header" << endl;
-
-		struct protocol_packet *response = (struct protocol_packet *) malloc (sizeof(struct protocol_packet));
-
-		async_read (socket_, buffer (&response->hdr, sizeof(response->hdr)),
-				bind (&client_session::handle_send_storage_reuqest_response_header, this, placeholders::error, placeholders::bytes_transferred, response, storage_data_cb));
-
-	}
-	else{
-		cout <<  "should not happen" << endl;
-		/*TODO add storage_data_cb*/
-	}
-
-	free(request);
-}
-
-void
-client_session::handle_send_storage_reuqest_response_header(const system::error_code& err, size_t n, struct protocol_packet *response ,storage_data_callback storage_data_cb){
-	if(!err){
-
-		cout << "client_session: receiving storage_request response's body" << endl;
-
-		cout << "client_session: payload length: " << response->hdr.payload_length << endl;
-
-		cout << "client_session: request type: " << (int)response->hdr.type << endl;
-
-		if(response->hdr.type == STORAGE_RESP){
-			async_read (socket_, buffer(&response->payload.storage_resp, response->hdr.payload_length),
-					bind (&client_session::handle_send_storage_request_response, this, placeholders::error, placeholders::bytes_transferred, response, storage_data_cb));
-		}
-		else{
-			cout << "/* that's severe - it shouldn't happen*/" << endl;
-		}
-	}
-	else{
-		cout <<  "should not happen" << endl;
-		/*TODO add storage_data_cb*/
-	}
+  /* TODO pass the callback to all handlers until the the response is fully received - then call callback */
 
 }
 
 void
-client_session::handle_send_storage_request_response(const system::error_code& err, size_t n, struct protocol_packet *response, storage_data_callback storage_data_cb){
-	if(!err){
-		cout << "client_session: Response: hash_code: " <<  response->payload.storage_resp.hash_code << ". STATUS: " << (int)response->payload.storage_resp.response << endl;
-		/* TODO call the callback */
-	}
-	else{
-		cout <<  "should not happen" << endl;
-		storage_data_cb(system::error_code (system::errc::protocol_error, system::errno_ecat));
-	}
-	free(response);
+client_session::send_storage_request_helper (vector<boost::asio::mutable_buffer> buffer_store, struct protocol_packet *request, storage_data_callback storage_data_cb)
+{
+  async_write (socket_, buffer_store, strand_.wrap (bind (&client_session::send_storage_request_written, this, placeholders::error, placeholders::bytes_transferred, request, storage_data_cb)));
+}
+
+void
+client_session::send_storage_request_written (const system::error_code& err, size_t n, struct protocol_packet *request, storage_data_callback storage_data_cb)
+{
+
+  if (!err) {
+
+    cout << "client_session: receiving storage_request response's header" << endl;
+
+    struct protocol_packet *response = (struct protocol_packet *) malloc (sizeof(struct protocol_packet));
+
+    async_read (socket_, buffer (&response->hdr, sizeof(response->hdr)),
+		strand_.wrap (bind (&client_session::handle_send_storage_reuqest_response_header, this, placeholders::error, placeholders::bytes_transferred, response, storage_data_cb)));
+
+  } else {
+    cout << "should not happen" << endl;
+    /*TODO add storage_data_cb*/
+  }
+
+  free (request);
+}
+
+void
+client_session::handle_send_storage_reuqest_response_header (const system::error_code& err, size_t n, struct protocol_packet *response, storage_data_callback storage_data_cb)
+{
+  if (!err) {
+
+    cout << "client_session: receiving storage_request response's body" << endl;
+
+    cout << "client_session: payload length: " << response->hdr.payload_length << endl;
+
+    cout << "client_session: request type: " << (int) response->hdr.type << endl;
+
+    if (response->hdr.type == STORAGE_RESP) {
+      async_read (socket_, buffer (&response->payload.storage_resp, response->hdr.payload_length),
+		  strand_.wrap (bind (&client_session::handle_send_storage_request_response, this, placeholders::error, placeholders::bytes_transferred, response, storage_data_cb)));
+    } else {
+      cout << "/* that's severe - it shouldn't happen*/" << endl;
+    }
+  } else {
+    cout << "should not happen" << endl;
+    /*TODO add storage_data_cb*/
+  }
+
+}
+
+void
+client_session::handle_send_storage_request_response (const system::error_code& err, size_t n, struct protocol_packet *response, storage_data_callback storage_data_cb)
+{
+  if (!err) {
+    cout << "client_session: Response: hash_code: " << response->payload.storage_resp.hash_code << ". STATUS: " << (int) response->payload.storage_resp.response << endl;
+    /* TODO call the callback */
+    is_pending_mutex.lock ();
+    is_pending = false;
+    cout << "client_session: " << socket_.remote_endpoint () << " LEAVING CRITICAL AREA - STORAGE" << endl;
+    is_pending_mutex.unlock ();
+    storage_data_cb (err);
+  } else {
+    cout << "should not happen" << endl;
+    storage_data_cb (system::error_code (system::errc::protocol_error, system::errno_ecat));
+  }
+  free (response);
 }
 
 /* fetch-related methods */
 void
-client_session::send_fetch_request (uint32_t hash_code, fetch_data_callback fetch_data_cb) {
+client_session::send_fetch_request (uint32_t hash_code, fetch_data_callback fetch_data_cb)
+{
   /* TODO pass the callback to all handlers until the the response is fully received - then call callback
-  u_int32_t dummy_length = 1000;
-  char *dummy_data = (char *) malloc(dummy_length);
-  fetch_data_cb(system::error_code (system::errc::protocol_error, system::errno_ecat), dummy_data, dummy_length);*/
-	struct protocol_packet *request = (struct protocol_packet *) malloc (sizeof(struct protocol_packet));
+   u_int32_t dummy_length = 1000;
+   char *dummy_data = (char *) malloc(dummy_length);
+   fetch_data_cb(system::error_code (system::errc::protocol_error, system::errno_ecat), dummy_data, dummy_length);*/
 
-	request->hdr.payload_length = sizeof(request->payload.fetch_req);
-	request->hdr.type = FETCH_REQ;
+  is_pending_mutex.lock ();
+  if (is_pending == false) {
+    is_pending = true;
+    is_pending_mutex.unlock ();
 
-	request->payload.fetch_req.hash_code = hash_code;
+    struct protocol_packet *request = (struct protocol_packet *) malloc (sizeof(struct protocol_packet));
 
-	async_write(socket_, buffer(request, sizeof(request->hdr) + sizeof(request->hdr.payload_length)),
-				bind(&client_session::send_fetch_request_written, this, placeholders::error, placeholders::bytes_transferred, request, fetch_data_cb));
+    request->hdr.payload_length = sizeof(request->payload.fetch_req);
+    request->hdr.type = FETCH_REQ;
 
-}
-
-void
-client_session::send_fetch_request_written(const system::error_code& err, size_t n, struct protocol_packet *request, fetch_data_callback fetch_data_cb)
-{
-	if(!err){
-
-		cout << "client_session: receiving storage_request response's header" << endl;
-
-		struct protocol_packet *response = (struct protocol_packet *) malloc (sizeof(struct protocol_packet));
-		async_read (socket_, buffer (&response->hdr, sizeof(response->hdr)),
-						bind (&client_session::handle_send_fetch_request_response_header, this, placeholders::error, placeholders::bytes_transferred, response, fetch_data_cb));
-	}
-	else{
-		cout <<  "should not happen" << endl;
-		/*TODO add fetch_data_cb*/
-	}
-
-	free(request);
+    request->payload.fetch_req.hash_code = hash_code;
+    async_write (socket_, buffer (request, sizeof(request->hdr) + sizeof(request->hdr.payload_length)),
+		 strand_.wrap (bind (&client_session::send_fetch_request_written, this, placeholders::error, placeholders::bytes_transferred, request, fetch_data_cb)));
+  } else {
+    is_pending_mutex.unlock ();
+    strand_.post (bind (&client_session::send_fetch_request, this, hash_code, fetch_data_cb));
+  }
 
 }
 
 void
-client_session::handle_send_fetch_request_response_header(const system::error_code& err, size_t n, struct protocol_packet *response , fetch_data_callback fetch_data_cb)
+client_session::send_fetch_request_written (const system::error_code& err, size_t n, struct protocol_packet *request, fetch_data_callback fetch_data_cb)
 {
-	if(!err){
-		cout << (int) response->hdr.type;
-		if(response->hdr.type == FETCH_RESP){
+  if (!err) {
 
-			cout << "client_session: receiving storage_request response's body" << endl;
-			cout << "client_session: payload length: " << response->hdr.payload_length << endl;
+    cout << "client_session: receiving storage_request response's header" << endl;
 
-			uint32_t data_length = response->hdr.payload_length - sizeof(response->payload.fetch_resp);
+    struct protocol_packet *response = (struct protocol_packet *) malloc (sizeof(struct protocol_packet));
+    async_read (socket_, buffer (&response->hdr, sizeof(response->hdr)),
+		strand_.wrap (bind (&client_session::handle_send_fetch_request_response_header, this, placeholders::error, placeholders::bytes_transferred, response, fetch_data_cb)));
+  } else {
+    cout << "should not happen" << endl;
+    /*TODO add fetch_data_cb*/
+  }
 
-			cout <<"client_session: data length: " << data_length << endl;
-			cout << "client_session: request type: " << (int)response->hdr.type << endl;
-
-			char* data = (char *) malloc (data_length);
-
-			array<mutable_buffer, 2> buffer_array =
-			{
-					buffer (&response->payload.fetch_req, sizeof(response->payload.fetch_req)),
-					buffer (data, data_length)
-			};
-
-			async_read (socket_, buffer_array,
-					bind (&client_session::handle_send_fetch_reqeust_response, this, placeholders::error, placeholders::bytes_transferred, response, data, data_length, fetch_data_cb));
-
-		}
-		else{
-			cout << "/* that's severe - it shouldn't happen*/" << endl;
-		}
-	}
-	else{
-		cout <<  "should not happen" << endl;
-		/*TODO add fetch_data_cb*/
-	}
+  free (request);
 
 }
 
 void
-client_session::handle_send_fetch_reqeust_response(const system::error_code& err, size_t n, struct protocol_packet *response ,char* data, uint32_t data_length, fetch_data_callback fetch_data_cb)
+client_session::handle_send_fetch_request_response_header (const system::error_code& err, size_t n, struct protocol_packet *response, fetch_data_callback fetch_data_cb)
 {
-	if(!err){
+  if (!err) {
+    cout << (int) response->hdr.type;
+    if (response->hdr.type == FETCH_RESP) {
 
-		cout << "client_session: Hash Code of data: " << response->payload.fetch_req.hash_code << endl;
-		cout << "client_session: Response: data length: " << data_length << endl;
+      cout << "client_session: receiving storage_request response's body" << endl;
+      cout << "client_session: payload length: " << response->hdr.payload_length << endl;
 
-	}
-	else{
-		fetch_data_cb(system::error_code (system::errc::protocol_error, system::errno_ecat), data, data_length);
-	}
-	free(response);
+      uint32_t data_length = response->hdr.payload_length - sizeof(response->payload.fetch_resp);
+
+      cout << "client_session: data length: " << data_length << endl;
+      cout << "client_session: request type: " << (int) response->hdr.type << endl;
+
+      char* data = (char *) malloc (data_length);
+
+      array<mutable_buffer, 2> buffer_array =
+      { buffer (&response->payload.fetch_req, sizeof(response->payload.fetch_req)), buffer (data, data_length) };
+
+      async_read (socket_, buffer_array,
+		  strand_.wrap (bind (&client_session::handle_send_fetch_request_response, this, placeholders::error, placeholders::bytes_transferred, response, data, data_length, fetch_data_cb)));
+
+    } else {
+      cout << "/* that's severe - it shouldn't happen*/" << endl;
+    }
+  } else {
+    cout << "should not happen" << endl;
+    /*TODO add fetch_data_cb*/
+  }
+
+}
+
+void
+client_session::handle_send_fetch_request_response (const system::error_code& err, size_t n, struct protocol_packet *response, char* data, uint32_t data_length, fetch_data_callback fetch_data_cb)
+{
+  if (!err) {
+
+    cout << "client_session: Hash Code of data: " << response->payload.fetch_req.hash_code << endl;
+    cout << "client_session: Response: data length: " << data_length << endl;
+
+    is_pending_mutex.lock ();
+    is_pending = false;
+    is_pending_mutex.unlock ();
+
+  } else {
+    fetch_data_cb (system::error_code (system::errc::protocol_error, system::errno_ecat), data, data_length);
+  }
+  free (response);
 }
 
 /* destructor */
