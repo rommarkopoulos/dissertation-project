@@ -57,7 +57,7 @@ public:
 			struct protocol_packet *request);
 
 	void
-	write_resolution_response(vector<tcp::endpoint> &replication_addresses);
+	write_resolution_response(vector<udp::endpoint> &replication_addresses);
 
 	void
 	resolution_response_written(const system::error_code& err, size_t n,
@@ -66,11 +66,7 @@ public:
 	/* random replication method */
 	void
 	random_replication(uint32_t hash_code, u_int8_t replicas,
-			vector<tcp::endpoint> &replication_addresses);
-
-	void
-	random_replication_udp(uint32_t hash_code, u_int8_t replicas,
-				vector<udp::endpoint> &replication_addresses);
+			vector<udp::endpoint> &replication_addresses);
 
 	/* variables */
 	metadata_server *mds;
