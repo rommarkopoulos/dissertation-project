@@ -68,10 +68,6 @@ public:
 	random_replication(uint32_t hash_code, u_int8_t replicas,
 			vector<tcp::endpoint> &replication_addresses);
 
-	void
-	random_replication_udp(uint32_t hash_code, u_int8_t replicas,
-				vector<udp::endpoint> &replication_addresses);
-
 	/* variables */
 	metadata_server *mds;
 
