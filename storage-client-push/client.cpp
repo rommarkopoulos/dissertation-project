@@ -1,9 +1,13 @@
 #include "client.h"
 
 client::client (string mds_address, uint16_t mds_port, size_t pool_size_) :
-    pool_size_ (pool_size_), signals_ (io_service_), work_ptr_ (new io_service::work (io_service_)), mds_endpoint_ (ip_v4::from_string (mds_address), mds_port), socket_udp (io_service_)
+    pool_size_ (pool_size_), signals_ (io_service_), work_ptr_ (new io_service::work (io_service_)), mds_endpoint_ (ip_v4::from_string (mds_address), mds_port), socket_udp (
+	io_service_, udp::endpoint (udp::v4 (), 4040)), delay (io_service_, posix_time::seconds (2))
 {
-  cout << "client: constructor()" << endl;
+  cout << endl;
+  cout << endl;
+  greenColor ("client");
+  cout << ": constructor()" << endl;
 }
 
 void
@@ -12,6 +16,7 @@ client::service_thread (io_service &service)
   try {
     service.run ();
   } catch (std::exception& e) {
+    redColor ("ERROR");
     cout << "ioservice exception was caught..not sure this is expected - re-running ioservice" << endl;
     service.run ();
   }
@@ -21,7 +26,8 @@ void
 client::init ()
 {
   system::error_code err;
-  cout << "client: init()" << endl;
+  greenColor ("client");
+  cout << ": init()" << endl;
 
   /* start threads */
   for (size_t i = 0; i < pool_size_; i++) {
@@ -45,7 +51,8 @@ client::init ()
     signals_.cancel ();
     work_ptr_.reset ();
   } else {
-    cout << "client: successfully connected to the meta-data server" << endl;
+    greenColor ("client");
+    cout << ": successfully connected to the meta-data server" << endl;
   }
 }
 
@@ -83,7 +90,8 @@ client::store_data (string name, uint8_t replicas, char* data, uint32_t length, 
 {
   u_int32_t hash_code = generate_hash_code (name);
 
-  cout << "client: store_data - filename: " << name << ", replication factor: " << (int) replicas << ", data length: " << length << endl;
+  greenColor ("client");
+  cout << ": store_data - filename: " << name << ", replication factor: " << (int) replicas << ", data length: " << length << endl;
 
   metadata_session->resolve_dataservers_storage (hash_code, replicas, bind (&client::storage_dataservers_resolved, this, _1, _2, hash_code, data, length, storage_cb));
 }
@@ -103,43 +111,39 @@ client::storage_dataservers_resolved (const system::error_code& err, vector<udp:
 {
   if (!err) {
 
+    greenColor ("client");
+    cout << "storage_dataservers_resolved()" << endl;
+
     if (endpoints.size () > 0) {
 
       /* for each endpoint, send a storage request */
       vector<udp::endpoint>::iterator endpoints_iter;
       shared_ptr<u_int8_t> replicas_ptr (new u_int8_t (endpoints.size ()));
-      cout << "initial value: " << (u_int32_t) (*replicas_ptr) << endl;
+
+      yellowColor ("client");
+      cout << "s_d_r: initial value: " << (u_int32_t) (*replicas_ptr) << endl;
+
       for (endpoints_iter = endpoints.begin (); endpoints_iter != endpoints.end (); endpoints_iter++) {
 	udp::endpoint &endpoint = *endpoints_iter;
 
-	cout << "IP address: " << endpoint.address ().to_string () << endl;
-	cout << "Port:       " << endpoint.port () << endl;
+	yellowColor ("client");
+	cout << "s_d_r: current endpoint's IP/PORT: " << endpoint.address ().to_string () << ":" << endpoint.port () << endl;
 
-//	struct push_protocol_packet *request = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
-//
-//	request->hdr.payload_length = sizeof(request->push_payload.start_storage);
-//	request->hdr.type = START_STORAGE;
-//
-//	request->push_payload.start_storage.hash_code = hash_code;
+	struct push_protocol_packet *request = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
 
-	struct test *request = (struct test *) malloc (sizeof(struct test));
+	request->hdr.payload_length = sizeof(request->push_payload.start_storage);
+	request->hdr.type = START_STORAGE;
+	request->push_payload.start_storage.hash_code = hash_code;
 
-	request->type = START_STORAGE;
+	yellowColor ("client");
+	cout << "s_d_r: request size: " << sizeof(request->push_payload.start_storage) << " bytes." << endl;
+	yellowColor ("client");
+	cout << "s_d_r: request type: " << (int) request->hdr.type << endl;
 
-	cout << "client::storage_dataservers_resolved()" << endl;
+	socket_udp.async_send_to (buffer (request, sizeof(request->hdr) + request->hdr.payload_length), endpoint,
+				  boost::bind (&client::write_start_storage_request, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, request, endpoint));
 
-	socket_udp.async_send_to(boost::asio::buffer(&request, sizeof(request))/*->hdr) + request->hdr.payload_length)*/, endpoint,
-				 boost::bind(&client::start_handler, this, boost::asio::placeholders::error,
-			            boost::asio::placeholders::bytes_transferred));
-
-	//io_service delay;
-
-	//boost::asio::deadline_timer tm(delay, boost::posix_time::seconds(5));
-
-	//tm.async_wait(bind (&client::storage_dataservers_resolved, this, err, endpoints, hash_code, data, length, storage_cb));
-
-	//delay.run();
-	//data_session->send_storage_request (hash_code, data, length, bind (&client::storage_request_written, this, _1, replicas_ptr, hash_code, storage_cb));
+	read_request ();
       }
     } else {
       /* I got zero servers back */
@@ -164,9 +168,108 @@ client::storage_request_written (const system::error_code& err, shared_ptr<u_int
 }
 
 void
-client::start_handler(const boost::system::error_code&, std::size_t)
+client::write_start_storage_request (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request, udp::endpoint ds_endpoint)
 {
-    cout << "client::start_handler()" << endl;
+  if (!err) {
+    /*get lock*/
+    encodings_mutex.lock ();
+
+    delay.wait ();
+
+    map<uint32_t, int>::iterator encoding_iter = encodings.find (request->push_payload.start_storage.hash_code);
+    if (encoding_iter != encodings.end ()) {
+
+      greenColor ("client");
+      cout << "write_start_storage_request()" << endl;
+      yellowColor ("client");
+      cout << ": ";
+      greenColor ("File Found!");
+      cout << endl;
+      encodings_mutex.unlock ();
+
+    } else {
+
+      redColor ("client");
+      cout << ": NOT FOUND" << endl;
+      socket_udp.async_send_to (buffer (request, sizeof(request->hdr) + request->hdr.payload_length), ds_endpoint,
+				boost::bind (&client::write_start_storage_request, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, request, ds_endpoint));
+      encodings_mutex.unlock ();
+    }
+  } else {
+    redColor ("client");
+    cout << ": write_start_storage_request: " << err.message () << endl;
+  }
+
+}
+
+void
+client::start_storage_request_written (const boost::system::error_code&, std::size_t, struct push_protocol_packet *request)
+{
+  greenColor ("client");
+  cout << "::start_storage_request_written() successfully" << endl;
+
+//  if()
+//
+//
+//  struct push_protocol_packet *response = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
+//
+//  udp::endpoint sender_endpoint_
+//
+//  socket_udp.async_receive_from (boost::asio::buffer (response, sizeof(struct push_protocol_packet)), sender_endpoint_,
+//  				  boost::bind (&client::handle_request, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, request, sender_endpoint_));
+
+}
+
+void
+client::read_request ()
+{
+
+  greenColor ("client");
+  cout << "read_request()" << endl;
+
+  struct push_protocol_packet *request = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
+
+  socket_udp.async_receive_from (boost::asio::buffer (request, sizeof(struct push_protocol_packet)), sender_endpoint_,
+				 boost::bind (&client::handle_request, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, request));
+
+  //read_request();
+}
+
+void
+client::handle_request (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request)
+{
+  greenColor ("client");
+  cout << "handle_request()" << endl;
+
+  if (!err) {
+    switch (request->hdr.type)
+    {
+      case START_STORAGE_OK:
+      {
+	greenColor ("client");
+	cout << ": START STORAGE OK for " << request->push_payload.start_storage.hash_code << endl;
+
+	encodings.insert (make_pair (request->push_payload.start_storage.hash_code, 1));
+
+	struct push_protocol_packet *response = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
+
+	response->hdr.payload_length = sizeof(request->push_payload.start__storage_ok);
+	response->hdr.type = START_STORAGE_OK;
+	response->push_payload.start__storage_ok.hash_code = request->push_payload.start_storage.hash_code;
+
+	break;
+      }
+
+      default:
+	redColor ("client");
+	cout << ": fatal - unknown request" << endl;
+	free (request);
+	break;
+    }
+  } else {
+    redColor ("client");
+    cout << ": handle_request: " << err.message () << endl;
+  }
 }
 
 void
@@ -221,6 +324,24 @@ void
 client::cleanup (void)
 {
 
+}
+
+void
+client::greenColor (string text)
+{
+  cout << "[" << BOLDGREEN << text << RESET << "]";
+}
+
+void
+client::redColor (string text)
+{
+  cout << "[" << BOLDRED << text << RESET << "]";
+}
+
+void
+client::yellowColor (string text)
+{
+  cout << "[" << BOLDYELLOW << text << RESET << "]";
 }
 
 //Destructor

@@ -1,6 +1,24 @@
 #ifndef METADATA_SERVER_H_
 #define METADATA_SERVER_H_
 
+#define RESET   "\033[0m"
+#define BLACK   "\033[30m"      /* Black */
+#define RED     "\033[31m"      /* Red */
+#define GREEN   "\033[32m"      /* Green */
+#define YELLOW  "\033[33m"      /* Yellow */
+#define BLUE    "\033[34m"      /* Blue */
+#define MAGENTA "\033[35m"      /* Magenta */
+#define CYAN    "\033[36m"      /* Cyan */
+#define WHITE   "\033[37m"      /* White */
+#define BOLDBLACK   "\033[1m\033[30m"      /* Bold Black */
+#define BOLDRED     "\033[1m\033[31m"      /* Bold Red */
+#define BOLDGREEN   "\033[1m\033[32m"      /* Bold Green */
+#define BOLDYELLOW  "\033[1m\033[33m"      /* Bold Yellow */
+#define BOLDBLUE    "\033[1m\033[34m"      /* Bold Blue */
+#define BOLDMAGENTA "\033[1m\033[35m"      /* Bold Magenta */
+#define BOLDCYAN    "\033[1m\033[36m"      /* Bold Cyan */
+#define BOLDWHITE   "\033[1m\033[37m"      /* Bold White */
+
 #include <iostream>
 #include <vector>
 #include <map>
@@ -68,17 +86,23 @@ public:
   handle_stop ();
 
   void
-  registration_request_written (const system::error_code& err, size_t n, struct protocol_packet *request);
+  read_request ();
 
   void
-  handle_header(const system::error_code& err, size_t n, protocol_packet *request);
+  handle_request (const boost::system::error_code& error, std::size_t bytes_transferred, struct push_protocol_packet *request);
 
   void
-  handle_registration_response(const system::error_code& err, size_t n, protocol_packet *request);
+  nothing (const boost::system::error_code& error, std::size_t bytes_transferred, struct push_protocol_packet *request);
+
+  /*color for terminal*/
+  void
+  greenColor (string text);
 
   void
-  handle_request(const system::error_code& err, size_t n);
+  redColor (string text);
 
+  void
+  yellowColor (string text);
 
   /* size of thread pool */
   size_t pool_size_;
@@ -100,15 +124,12 @@ public:
   vector<server_session_ptr> server_sessions;
 
   /* server-related stuff */
-  tcp::acceptor acceptor_;
-  tcp::endpoint local_endpoint_;
-  tcp::socket tcp_socket_;
-
-  udp::endpoint local_udppoint_;
   udp::socket udp_socket_;
+  udp::endpoint sender_endpoint_;
 
   /* data-server is also a client that registers to the meta-data server */
   tcp::endpoint mds_endpoint_;
+  tcp::endpoint local_endpoint_;
   client_session_ptr client_session_ptr_;
 
   /* data-server specific variables */
@@ -116,4 +137,4 @@ public:
   map<uint32_t, stored_data> storage;
 };
 
-#endif
+#endif /* METADATA_SERVER_H_*/

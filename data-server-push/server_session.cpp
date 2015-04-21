@@ -1,40 +1,29 @@
-#include "server_session.h"
-
-server_session::server_session (io_service& io_service, udp::endpoint local_udppoint_, data_server *ds_) :
-    socket_ (io_service, local_udppoint_), ds_ (ds_)
-{
-  cout << "server_session: constructor()" << endl;
-}
-
-void
-server_session::start ()
-{
-  cout << "server_session:start" << endl;
-  read_request ();
-}
-
-void
-server_session::read_request ()
-{
-
-  cout << "[CALL] : server_session::read_request()" << endl;
-  //struct push_protocol_packet *request = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
-
-  struct test *request = (struct test *) malloc (sizeof(struct test));
-
-  udp::endpoint sender_endpoint_;
-
-  socket_.async_receive_from (boost::asio::buffer (&request, sizeof(request)), sender_endpoint_,
-			      bind (&server_session::handle_request, this, placeholders::error, placeholders::bytes_transferred));
-
-  cout << "[INFO] : server_session::read_request() | started" << endl;
-  cout << "[INFO] : _socket.localaddress = " << socket_.local_endpoint().address().to_string() << "port: " << socket_.local_endpoint().port() << endl;
-}
-
-void
-server_session::handle_request (const system::error_code& err, size_t n)
-{
-  cout << "[CALL] : server_session::handle_request()" << endl;
+//#include "server_session.h"
+//
+//server_session::server_session (io_service& io_service, data_server *ds_) :
+//    socket_ (io_service), ds_ (ds_)
+//{
+//	cout << "server_session: constructor()" << endl;
+//}
+//
+//void
+//server_session::start ()
+//{
+//	read_header ();
+//}
+//
+//void
+//server_session::read_header ()
+//{
+//
+//	struct protocol_packet *request = (struct protocol_packet *) malloc (sizeof(struct protocol_packet));
+//	async_read (socket_, buffer (&request->hdr, sizeof(request->hdr)),
+//	      bind (&server_session::handle_header, this, placeholders::error, placeholders::bytes_transferred, request));
+//}
+//
+//void
+//server_session::handle_header (const system::error_code& err, size_t n, protocol_packet *request)
+//{
 //	struct header *hdr = &request->hdr;
 //
 //	if (!err) {
@@ -84,8 +73,8 @@ server_session::handle_request (const system::error_code& err, size_t n)
 //	} else {
 //		cout << "remote endpoint " << socket_.remote_endpoint() << " disconnected.." << "\n";
 //	}
-}
-
+//}
+//
 //void
 //server_session::handle_storage_request (const system::error_code& err, size_t n, struct protocol_packet *request, char *data, uint32_t data_length)
 //{
@@ -212,8 +201,8 @@ server_session::handle_request (const system::error_code& err, size_t n)
 //	}
 //	free (response);
 //}
-
-server_session::~server_session (void)
-{
-  cout << "server_session: destructor" << endl;
-}
+//
+//server_session::~server_session (void)
+//{
+//	cout << "server_session: destructor" << endl;
+//}

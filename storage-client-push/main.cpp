@@ -64,9 +64,6 @@ main (int argc, char *argv[])
 //  client.fetch_data (name, bind (&data_fetched, _1, _2, _3, _4, name));
 
 
-  cout << "SAGAPWWWWWWWWWWWWWWWWWWWWWWWW" <<  endl;
-
-
   /*sleep (5);
 
   string non_existent_name ("non-existent name");
@@ -80,3 +77,4 @@ main (int argc, char *argv[])
 
   return 0;
 }
+
