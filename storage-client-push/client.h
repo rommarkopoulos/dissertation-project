@@ -19,7 +19,9 @@
 #define BOLDCYAN    "\033[1m\033[36m"      /* Bold Cyan */
 #define BOLDWHITE   "\033[1m\033[37m"      /* Bold White */
 
+#include <stdlib.h>
 #include <iostream>
+#include <queue>
 #include <vector>
 #include <map>
 
@@ -29,17 +31,31 @@
 #include <boost/functional/hash.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-
-#include "client_session.h"
 
 using namespace boost;
 using namespace asio;
 using namespace ip;
 
 using namespace std;
+
+#include "client_session.h"
+
+//#include "decoder.h"
+//#include "encoder.h"
+
+#include <boost/chrono/chrono.hpp>
+#include <boost/random/mersenne_twister.hpp>
+#include <boost/random/random_device.hpp>
+
+#define BLOB_ID_SIZE 32
+#define BLOB_SIZE 1408 * 20000
+
+using namespace boost;
+//using namespace chrono;
 
 class client_session;
 
@@ -153,6 +169,16 @@ public:
   mutex encodings_mutex;
 
   boost::asio::deadline_timer delay;
+
+  /*FOUNTAIN CODES*/
+  boost::random_device rd;
+
+  /*encoder*/
+  //encoder enc;
+  unsigned int number_of_symbols_to_encode;
+
+  /*decoder*/
+  //decoder dec;
 };
 
 #endif /* CLIENT_H_ */

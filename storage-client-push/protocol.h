@@ -20,7 +20,8 @@
 
 #define OK 			0x00
 
-#define SYMBOL_SIZE		0x400
+#define BLOB_ID_SIZE 32
+#define BLOB_SIZE 1408 * 20000
 
 struct __attribute__((__packed__)) header
 {
@@ -74,7 +75,7 @@ struct __attribute__((__packed__)) start_storage_ok
   char padding[1032];
 };
 
-struct __attribute__((__packed__)) symbol
+struct __attribute__((__packed__)) symbol_data
 {
   uint32_t hash_code;
   uint32_t total_size;
@@ -110,7 +111,7 @@ struct __attribute__((__packed__)) push_protocol_packet
   {
     struct start_storage start_storage;
     struct start_storage_ok start__storage_ok;
-    struct symbol symbol;
+    struct symbol_data symbol;
   } push_payload;
 };
 
