@@ -1,5 +1,10 @@
 #include "client_session.h"
 
+using namespace boost;
+using namespace asio;
+using namespace ip;
+using namespace std;
+
 client_session::client_session (io_service& io_service, client *client_) :
     socket_ (io_service), strand_ (io_service), client_ (client_)
 {

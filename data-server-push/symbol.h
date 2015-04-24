@@ -14,7 +14,7 @@
 #include <string.h>
 #include <set>
 
-#define SYMBOL_SIZE 1408 // MUST BE dividable to 16 (alignment for sse!)
+#define SYMBOL_SIZE 1024 // MUST BE dividable to 16 (alignment for sse!)
 
 using namespace std;
 

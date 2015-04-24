@@ -19,63 +19,45 @@
 #define BOLDCYAN    "\033[1m\033[36m"      /* Bold Cyan */
 #define BOLDWHITE   "\033[1m\033[37m"      /* Bold White */
 
-#include <stdlib.h>
-#include <iostream>
-#include <queue>
-#include <vector>
-#include <map>
-
-#include <boost/asio.hpp>
+#include <boost/asio/ip/address_v4.hpp>
+#include <boost/asio/io_service.hpp>
+#include <boost/function.hpp>
+#include <boost/system/error_code.hpp>
+#include <boost/random/random_device.hpp>
 #include <boost/enable_shared_from_this.hpp>
-#include <boost/thread/thread.hpp>
 #include <boost/functional/hash.hpp>
-#include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/chrono/chrono.hpp>
 
-
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
-using namespace boost;
-using namespace asio;
-using namespace ip;
-
-using namespace std;
+#include <signal.h>
 
 #include "client_session.h"
+#include "protocol.h"
 
-//#include "decoder.h"
-//#include "encoder.h"
-
-#include <boost/chrono/chrono.hpp>
-#include <boost/random/mersenne_twister.hpp>
-#include <boost/random/random_device.hpp>
-
-#define BLOB_ID_SIZE 32
-#define BLOB_SIZE 1408 * 20000
-
-using namespace boost;
-//using namespace chrono;
+#include "decoder.h"
+#include "encoder.h"
 
 class client_session;
 
-typedef address_v4 ip_v4;
-typedef shared_ptr<io_service::work> work_ptr;
-typedef shared_ptr<client_session> client_session_ptr;
+typedef boost::asio::ip::address_v4 ip_v4;
+typedef boost::shared_ptr<boost::asio::io_service::work> work_ptr;
+typedef boost::shared_ptr<client_session> client_session_ptr;
 
-typedef function<void
-(const system::error_code&, uint32_t&)> storage_callback;
-typedef function<void
-(const system::error_code&, uint32_t&, char*, uint32_t&)> fetch_callback;
+typedef std::map<uint32_t, encoding_state*>::iterator encodings_iterator;
+typedef std::map<uint32_t, decoding_state*>::iterator decodings_iterator;
 
-class client : public enable_shared_from_this<client>, private noncopyable
+typedef boost::function<void
+(const boost::system::error_code&, uint32_t&)> storage_callback;
+typedef boost::function<void
+(const boost::system::error_code&, uint32_t&, char*, uint32_t&)> fetch_callback;
+
+class client : public boost::enable_shared_from_this<client>, private boost::noncopyable
 {
 public:
-  client (string mds_address, uint16_t mds_port, size_t pool_size_);
+  client (std::string mds_address, uint16_t mds_port, size_t pool_size_);
   ~client (void);
 
   void
-  service_thread (io_service &service);
+  service_thread (boost::asio::io_service &service);
 
   void
   init ();
@@ -91,94 +73,105 @@ public:
 
   /*  stores given data */
   void
-  store_data (string name, uint8_t replicas, char* data, uint32_t length, storage_callback storage_cb);
+  store_data (std::string name, uint8_t replicas, char* data, uint32_t length, storage_callback storage_cb);
 
   void
-  storage_dataservers_resolved (const system::error_code& err, vector<udp::endpoint> &endpoints, u_int32_t hash_code, char* data, uint32_t length, storage_callback storage_cb);
+  storage_dataservers_resolved (const boost::system::error_code& err, std::vector<boost::asio::ip::udp::endpoint> &endpoints, u_int32_t hash_code, char* data, uint32_t length,
+				storage_callback storage_cb);
 
   void
-  fetch_dataservers_resolved (const system::error_code& err, vector<udp::endpoint> &endpoints, u_int32_t hash_code, fetch_callback fetch_cb);
+  fetch_dataservers_resolved (const boost::system::error_code& err, std::vector<boost::asio::ip::udp::endpoint> &endpoints, u_int32_t hash_code, fetch_callback fetch_cb);
 
   void
-  storage_request_written (const system::error_code& err, shared_ptr<u_int8_t> replicas_ptr, u_int32_t hash_code, storage_callback storage_cb);
+  storage_request_written (const boost::system::error_code& err, boost::shared_ptr<u_int8_t> replicas_ptr, u_int32_t hash_code, storage_callback storage_cb);
 
   void
-  fetch_request_written (const system::error_code& err, char *data, uint32_t &length, u_int32_t hash_code, fetch_callback fetch_cb);
+  fetch_request_written (const boost::system::error_code& err, char *data, uint32_t &length, u_int32_t hash_code, fetch_callback fetch_cb);
 
   /* fetch data using the given name */
   void
-  fetch_data (string name, fetch_callback fetch_cb);
+  fetch_data (std::string name, fetch_callback fetch_cb);
 
   void
   cleanup (void);
 
   void
-  greenColor (string text);
+  greenColor (std::string text);
 
   void
-  redColor (string text);
+  redColor (std::string text);
 
   void
-  yellowColor (string text);
+  yellowColor (std::string text);
 
   void
-  read_request ();
+  read_request (unsigned char* blob_to_encode);
 
   void
-  handle_request (const boost::system::error_code& error, std::size_t bytes_transferred, struct push_protocol_packet *request);
+  handle_request (const boost::system::error_code& error, std::size_t bytes_transferred, struct push_protocol_packet *request, unsigned char* blob_to_encode, boost::asio::ip::udp::endpoint sender_endpoint_);
 
   /*new methods*/
   void
-  write_start_storage_request (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request, udp::endpoint ds_endpoint);
+  write_start_storage_request (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request, boost::asio::ip::udp::endpoint ds_endpoint, size_t encoded_blob);
 
   void
   start_storage_request_written (const boost::system::error_code&, std::size_t, struct push_protocol_packet *request);
 
+  void
+  stop_storage_request_written (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *response);
+
+  void
+  symbol_request_written (const boost::system::error_code& err, std::size_t n, symbol *sym, struct push_protocol_packet *request, struct push_protocol_packet *request_symbol, size_t encoded_hash);
+
   /* generate a hash_code for filenames */
   uint32_t
-  generate_hash_code (string s);
+  generate_hash_code (std::string s);
 
   /* size of thread pool */
   size_t pool_size_;
 
   /* a boost thread_group */
-  thread_group thread_grp_;
+  boost::thread_group thread_grp_;
 
   /* a single io_service object for the metadata-server */
-  io_service io_service_;
+  boost::asio::io_service io_service_;
 
   /* set of signals */
-  signal_set signals_;
+  boost::asio::signal_set signals_;
 
   /* boost work to avoid premature destruction */
   work_ptr work_ptr_;
 
   /* mutex to lock access to the map of client sessions */
-  mutex data_sessions_mutex;
+  boost::mutex data_sessions_mutex;
 
   /* a dedicated client session with the meta-data server */
-  tcp::endpoint mds_endpoint_;
+  boost::asio::ip::tcp::endpoint mds_endpoint_;
   client_session_ptr metadata_session;
 
   /*udp stuff for client*/
-  udp::socket socket_udp;
-  udp::endpoint server_endpoint_;
-  udp::endpoint sender_endpoint_;
+  boost::asio::ip::udp::socket socket_udp;
+  boost::asio::ip::udp::endpoint server_endpoint_;
+  boost::asio::ip::udp::endpoint sender_endpoint_;
 
-  map<uint32_t, int> encodings;
-  mutex encodings_mutex;
-
+  /*TIMERS might not be necessary*/
   boost::asio::deadline_timer delay;
+  boost::asio::deadline_timer write_delay;
 
   /*FOUNTAIN CODES*/
   boost::random_device rd;
+  unsigned char blob_id[BLOB_ID_SIZE];
 
   /*encoder*/
-  //encoder enc;
+  encoder enc;
   unsigned int number_of_symbols_to_encode;
+  std::map<uint32_t, encoding_state *> encodings;
+  boost::mutex encodings_mutex;
 
   /*decoder*/
-  //decoder dec;
+  decoder dec;
+  std::map<uint32_t, decoding_state *> decodings;
+  boost::mutex decodings_mutex;
 };
 
 #endif /* CLIENT_H_ */

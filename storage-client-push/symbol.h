@@ -14,9 +14,7 @@
 #include <string.h>
 #include <set>
 
-#define SYMBOL_SIZE 1408 // MUST BE dividable to 16 (alignment for sse!)
-
-using namespace std;
+#define SYMBOL_SIZE 1024 // MUST BE dividable to 16 (alignment for sse!)
 
 /*
  * This class represents a self-contained symbol that can be sent as a payload
@@ -34,7 +32,7 @@ public:
   unsigned int degree; // the degree of the symbol - no need to send it..The seed alone is enough!
   unsigned int seed;   // a seed to be used on "the other side" to calculate the neighbour set (will reseed a fast random generator)
   unsigned char *symbol_data; // the data of the symbol
-  set<unsigned int> neighbours; // a set containing all neighbours for this symbol - no duplicate neighbours exist (used only by the decoder!)
+  std::set<unsigned int> neighbours; // a set containing all neighbours for this symbol - no duplicate neighbours exist (used only by the decoder!)
 };
 
 inline
@@ -50,7 +48,7 @@ symbol::symbol ()
 inline
 symbol::symbol (const symbol& orig)
 {
-  cout << "symbol: copy constructor NOT implemented yet" << endl;
+	std::cout << "symbol: copy constructor NOT implemented yet" << std::endl;
 }
 
 inline

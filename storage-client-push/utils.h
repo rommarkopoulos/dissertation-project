@@ -1,6 +1,10 @@
 #ifndef __trevi__utils__
 #define __trevi__utils__
 
+#include <emmintrin.h>
+
+#include "symbol.h"
+
 static unsigned int
 calculate_number_of_fragments (unsigned int blob_size, unsigned short symbol_size)
 {

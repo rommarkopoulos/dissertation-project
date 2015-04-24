@@ -15,12 +15,8 @@
 #include <boost/random/random_device.hpp>
 #include <boost/random/mersenne_twister.hpp>
 
-#include <emmintrin.h>
-
 #include "decoding_state.h"
 #include "utils.h"
-
-using namespace std;
 
 class decoder
 {
@@ -44,9 +40,9 @@ private:
   // The decoder keeps a map of all soliton distributions for each different number of fragments.
   // I don't know how to quickly get values from a robust soliton distribution so I model them as discrete distributions after I calculate the pdf.
   // This is obviously quite expensive so I cache all these distributions.
-  map<unsigned int, robust_soliton_distribution *> soliton_distributions;
+  std::map<unsigned int, robust_soliton_distribution *> soliton_distributions;
   //map of uniform distributions
-  map<unsigned int, boost::random::uniform_int_distribution<unsigned int> *> uniform_distributions;
+  std::map<unsigned int, boost::random::uniform_int_distribution<unsigned int> *> uniform_distributions;
 };
 
 inline
@@ -58,15 +54,15 @@ inline
 decoder::decoder (const decoder& orig) :
     generator (rand ())
 {
-  cout << "decoder: copy constructor NOT implemented yet" << endl;
+	std::cout << "decoder: copy constructor NOT implemented yet" << std::endl;
 }
 
 inline
 decoder::~decoder ()
 {
   //delete all stored soliton and uniform distributions
-  map<unsigned int, robust_soliton_distribution *>::iterator soliton_distr_iter;
-  map<unsigned int, boost::random::uniform_int_distribution<unsigned int> *>::iterator uniform_distr_iter;
+	std::map<unsigned int, robust_soliton_distribution *>::iterator soliton_distr_iter;
+	std::map<unsigned int, boost::random::uniform_int_distribution<unsigned int> *>::iterator uniform_distr_iter;
   for (soliton_distr_iter = soliton_distributions.begin (); soliton_distr_iter != soliton_distributions.end (); soliton_distr_iter++) {
     delete (*soliton_distr_iter).second;
   }
@@ -78,8 +74,8 @@ decoder::~decoder ()
 inline decoding_state *
 decoder::init_state (unsigned char *blob_id, unsigned int blob_size, unsigned char *blob)
 {
-  map<unsigned int, robust_soliton_distribution *>::iterator soliton_distr_iter;
-  map<unsigned int, boost::random::uniform_int_distribution<unsigned int> *>::iterator uniform_distr_iter;
+	std::map<unsigned int, robust_soliton_distribution *>::iterator soliton_distr_iter;
+	std::map<unsigned int, boost::random::uniform_int_distribution<unsigned int> *>::iterator uniform_distr_iter;
   robust_soliton_distribution *soliton_distribution;
   boost::random::uniform_int_distribution<unsigned int> *uniform_distribution;
   unsigned int number_of_fragments;
@@ -92,7 +88,7 @@ decoder::init_state (unsigned char *blob_id, unsigned int blob_size, unsigned ch
     // create a new robust soliton distribution for number_of_fragments
     soliton_distribution = new robust_soliton_distribution (&this->generator, number_of_fragments);
     // add it to the soliton distributions map;
-    soliton_distributions.insert (pair<unsigned int, robust_soliton_distribution *> (number_of_fragments, soliton_distribution));
+    soliton_distributions.insert (std::pair<unsigned int, robust_soliton_distribution *> (number_of_fragments, soliton_distribution));
   } else {
     //a robust soliton distribution for this number of fragments has been previously created
     //just set the pointer
@@ -102,7 +98,7 @@ decoder::init_state (unsigned char *blob_id, unsigned int blob_size, unsigned ch
     // create a new uniform_int_distribution for number_of_fragments
     uniform_distribution = new boost::random::uniform_int_distribution<unsigned int> (1, number_of_fragments);
     // add it to the soliton uniform_distributions map;
-    uniform_distributions.insert (pair<unsigned int, boost::random::uniform_int_distribution<unsigned int> *> (number_of_fragments, uniform_distribution));
+    uniform_distributions.insert (std::pair<unsigned int, boost::random::uniform_int_distribution<unsigned int> *> (number_of_fragments, uniform_distribution));
   } else {
     //a uniform_distribution for this number of fragments has been previously created
     //just set the pointer
@@ -116,7 +112,7 @@ decoder::decode_next (decoding_state *dec_state, symbol *a_symbol)
 {
   unsigned int neighbour = 0;
   unsigned int degree_counter = 0;
-  set<unsigned int>::iterator set_it;
+  std::set<unsigned int>::iterator set_it;
   // reseed the distribution
   generator.seed (a_symbol->seed);
   // get the degree for the  symbol
@@ -177,7 +173,7 @@ decoder::decode_next (decoding_state *dec_state, symbol *a_symbol)
 inline void
 decoder::handle_decoded_symbol (decoding_state *dec_state)
 {
-  deque<symbol *>::iterator index_it;
+	std::deque<symbol *>::iterator index_it;
   symbol *a_symbol, *b_symbol;
   unsigned int last_neighbour;
 
@@ -226,22 +222,22 @@ decoder::handle_decoded_symbol (decoding_state *dec_state)
 inline void
 decoder::print_debugging_info (decoding_state *dec_state)
 {
-  deque<symbol *>::iterator index_it;
-  cout << dec_state->fragments_bitset << endl;
+	std::deque<symbol *>::iterator index_it;
+	std::cout << dec_state->fragments_bitset << std::endl;
   for (unsigned int i = 0; i < dec_state->number_of_fragments; i++) {
     index_it = dec_state->neighbour_index.at (i).begin ();
-    cout << i + 1 << ": ";
+    std::cout << i + 1 << ": ";
     while (index_it != dec_state->neighbour_index.at (i).end ()) {
-      cout << "[" << (*index_it)->degree << ": ";
-      set<unsigned int>::iterator set_it = (*index_it)->neighbours.begin ();
+    	std::cout << "[" << (*index_it)->degree << ": ";
+    	std::set<unsigned int>::iterator set_it = (*index_it)->neighbours.begin ();
       while (set_it != (*index_it)->neighbours.end ()) {
-	cout << *set_it << ",";
+    	  std::cout << *set_it << ",";
 	set_it++;
       }
-      cout << "], ";
+      std::cout << "], ";
       index_it++;
     }
-    cout << endl;
+    std::cout << std::endl;
   }
 }
 

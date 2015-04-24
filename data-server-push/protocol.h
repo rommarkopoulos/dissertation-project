@@ -4,20 +4,22 @@
 #define REGISTRATION_REQ 	0x00
 #define REGISTRATION_RESP 	0x01
 
-#define START_STORAGE		5
+#define START_STORAGE		0x05
 #define START_STORAGE_OK	0x06
 
 #define FETCH_REQ 		0x07
 #define FETCH_RESP 		0x08
 
-#define	STOP			0x11
-#define STOP_OK			0x12
+#define	STOP_STORAGE		0x11
+#define STOP_STORAGE_OK		0x12
 
-#define SYMBOL			0x13
+#define SYMBOL_DATA		0x13
 
 #define OK 			0x00
 
-#define SYMBOL_SIZE		0x400
+#define BLOB_ID_SIZE 32
+#define BLOB_SIZE 1024 * 1
+#define PADDING 8
 
 struct __attribute__((__packed__)) header
 {
@@ -56,27 +58,35 @@ struct __attribute__((__packed__)) push_header
 struct __attribute__((__packed__)) start_storage
 {
   uint32_t hash_code;
-  char padding[1032];
+  //char padding[1032];
 };
 
 struct __attribute__((__packed__)) start_storage_ok
 {
   uint32_t hash_code;
-  char padding[1032];
+  //char padding[1032];
 };
 
-struct __attribute__((__packed__)) symbol
+struct __attribute__((__packed__)) symbol_data
 {
   uint32_t hash_code;
-  uint32_t total_size;
+  uint32_t blob_size;
   uint32_t seed;
-  char* symbol;
+  /* symbol data will be allocated and read separately */
 };
 
-struct __attribute__((__packed__)) test
+struct __attribute__((__packed__)) stop_storage
 {
-  uint8_t type;
+  uint32_t hash_code;
+  //char padding[1032];
 };
+
+struct __attribute__((__packed__)) stop_storage_ok
+{
+  uint32_t hash_code;
+  //char padding[1032];
+};
+
 
 struct __attribute__((__packed__)) protocol_packet
 {
@@ -96,8 +106,10 @@ struct __attribute__((__packed__)) push_protocol_packet
   union
   {
     struct start_storage start_storage;
-    struct start_storage_ok start__storage_ok;
-    struct symbol symbol;
+    struct start_storage_ok start_storage_ok;
+    struct symbol_data symbol_data;
+    struct stop_storage stop_storage;
+    struct stop_storage_ok stop_storage_ok;
   } push_payload;
 };
 

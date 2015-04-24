@@ -18,8 +18,6 @@
 #include "symbol.h"
 #include "robust_soliton_distribution.h"
 
-using namespace std;
-
 class decoding_state
 {
 public:
@@ -40,9 +38,9 @@ public:
   boost::random::uniform_int_distribution<unsigned int> *neighbour_calculator;
 
   unsigned int number_of_decoded_symbols; // the number of symbols I have decoded so far
-  vector<deque<symbol *> > neighbour_index; // index of currently stored symbols (position 0 refers to neighbour 1 and so on)
+  std::vector<std::deque<symbol *> > neighbour_index; // index of currently stored symbols (position 0 refers to neighbour 1 and so on)
   boost::dynamic_bitset<> fragments_bitset; // a bitmap of decoded symbols (position 0 refers to neighbour 1 and so on)
-  deque<symbol *> ripple; // for handling multiple decodings
+  std::deque<symbol *> ripple; // for handling multiple decodings
   boost::dynamic_bitset<> duplicate_neighbour_guard;
 
   unsigned int symbol_counter; // for debugging
@@ -73,14 +71,14 @@ decoding_state::decoding_state (unsigned char *blob_id, unsigned int blob_size, 
 inline
 decoding_state::decoding_state (const decoding_state& orig)
 {
-  cout << "decoding_state: copy constructor NOT implemented yet" << endl;
+	std::cout << "decoding_state: copy constructor NOT implemented yet" << std::endl;
 }
 
 inline
 decoding_state::~decoding_state ()
 {
-  vector<deque<symbol *> >::iterator neighbour_index_it;
-  deque<symbol *>::iterator deque_it;
+	std::vector<std::deque<symbol *> >::iterator neighbour_index_it;
+	std::deque<symbol *>::iterator deque_it;
   // if the blob is not decoded I need to free some memory from the neighbour_index
   if (number_of_decoded_symbols < number_of_fragments) {
     for (neighbour_index_it = neighbour_index.begin (); neighbour_index_it != neighbour_index.end (); neighbour_index_it++) {

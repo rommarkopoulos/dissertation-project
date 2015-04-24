@@ -1,10 +1,12 @@
 #include <boost/lexical_cast.hpp>
+#include <boost/system/error_code.hpp>
 
 #include <iostream>
 
 #include "client.h"
 
 using namespace std;
+using namespace boost;
 
 void
 data_stored (const system::error_code& err, uint32_t &hash_code, string name, char *data)

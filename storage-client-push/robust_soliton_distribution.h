@@ -17,8 +17,6 @@
 #define c 0.02    // a robust soliton parameter
 #define delta 0.6 // a robust soliton parameter
 
-using namespace std;
-
 class robust_soliton_distribution
 {
 public:
@@ -52,7 +50,7 @@ robust_soliton_distribution::robust_soliton_distribution (boost::random::mt19937
 inline
 robust_soliton_distribution::robust_soliton_distribution (const robust_soliton_distribution& orig)
 {
-  cout << "robust_soliton_distribution: copy constructor NOT implemented yet" << endl;
+  std::cout << "robust_soliton_distribution: copy constructor NOT implemented yet" << std::endl;
 }
 
 inline
@@ -64,7 +62,7 @@ robust_soliton_distribution::~robust_soliton_distribution ()
 inline boost::random::discrete_distribution<unsigned int> *
 robust_soliton_distribution::init_discrete_distribution (unsigned int max)
 {
-  vector<double> pdf;
+  std::vector<double> pdf;
   pdf.push_back (0.0);
   for (unsigned int i = 1; i <= max; i++) {
     pdf.push_back (p (i, max) + t (i, max));

@@ -15,8 +15,6 @@
 #include "symbol.h"
 #include "robust_soliton_distribution.h"
 
-using namespace std;
-
 // An encoding_state object stores some state about a specific blob.
 // i.e. number_of_fragments, size_of_last_fragment and most importantly a padded version of the last fragment.
 // To avoid lookups in a hash map for each symbol it stores a pointer to the right degree_calculator (a robust soliton distribution).
@@ -66,7 +64,7 @@ encoding_state::encoding_state (unsigned char *blob_id, unsigned int blob_size, 
 inline
 encoding_state::encoding_state (const encoding_state& orig)
 {
-  cout << "encoding_state: copy constructor NOT implemented yet" << endl;
+  std::cout << "encoding_state: copy constructor NOT implemented yet" << std::endl;
 }
 
 inline
