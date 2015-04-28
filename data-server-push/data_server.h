@@ -94,7 +94,10 @@ public:
   handle_request (const boost::system::error_code& error, std::size_t bytes_transferred, struct push_protocol_packet *request, unsigned char *symbol_data);
 
   void
-  nothing (const boost::system::error_code& error, std::size_t bytes_transferred, struct push_protocol_packet *request);
+  start_storage_ok_request_written (const boost::system::error_code& error, std::size_t bytes_transferred, struct push_protocol_packet *response);
+
+  void
+  stop_storage_request_written (const boost::system::error_code& error, std::size_t bytes_transferred, struct push_protocol_packet *response);
 
   /*color for terminal*/
   void

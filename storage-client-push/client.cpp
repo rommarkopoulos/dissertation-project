@@ -8,7 +8,7 @@ using namespace chrono;
 
 client::client (string mds_address, uint16_t mds_port, size_t pool_size_) :
     pool_size_ (pool_size_), signals_ (io_service_), work_ptr_ (new io_service::work (io_service_)), mds_endpoint_ (ip_v4::from_string (mds_address), mds_port), socket_udp (
-	io_service_, udp::endpoint (udp::v4 (), 4040)), delay (io_service_, posix_time::seconds (2)), write_delay(io_service_, posix_time::seconds(5))
+	io_service_, udp::endpoint (udp::v4 (), 4040)), delay (io_service_, posix_time::seconds (2)), write_delay (io_service_, posix_time::seconds (5))
 {
   cout << endl;
   cout << endl;
@@ -122,7 +122,7 @@ client::storage_dataservers_resolved (const system::error_code& err, vector<udp:
     // generate a random blob - for debugging purposes to check that decoding works properly
     boost::random::mt19937 generator (rd ()); // returns unsigned int - 32 bits
 
-    number_of_symbols_to_encode = 10;
+    number_of_symbols_to_encode = 1500;
 
     posix_memalign ((void **) &blob_to_encode, 16, BLOB_SIZE);
     memset (blob_to_encode, 0, BLOB_SIZE);
@@ -173,9 +173,9 @@ client::storage_dataservers_resolved (const system::error_code& err, vector<udp:
 	yellowColor ("client");
 	cout << "s_d_r: request type: " << (int) request->hdr.type << endl;
 
-
-	socket_udp.async_send_to (buffer_write, endpoint,
-				  boost::bind (&client::write_start_storage_request, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, request, endpoint, encoded_hash));
+	socket_udp.async_send_to (
+	    buffer_write, endpoint,
+	    boost::bind (&client::write_start_storage_request, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, request, endpoint, encoded_hash));
 
 	read_request (blob_to_encode);
       }
@@ -206,7 +206,6 @@ client::write_start_storage_request (const boost::system::error_code& err, std::
 {
   if (!err) {
 
-
     delay.wait ();
 
     encodings_iterator encoding_iter;
@@ -214,11 +213,11 @@ client::write_start_storage_request (const boost::system::error_code& err, std::
     /*get lock*/
     encodings_mutex.lock ();
 
-    encoding_iter= encodings.find (request->push_payload.start_storage.hash_code);
+    encoding_iter = encodings.find (request->push_payload.start_storage.hash_code);
 
     if (encoding_iter != encodings.end ()) {
 
-      encodings_mutex.unlock();
+      encodings_mutex.unlock ();
 
       greenColor ("client");
       cout << "write_start_storage_request()" << endl;
@@ -227,18 +226,20 @@ client::write_start_storage_request (const boost::system::error_code& err, std::
       greenColor ("File Found!");
       cout << endl;
       yellowColor ("client");
-      cout << "Starting the encoding of "<< number_of_symbols_to_encode << " symbols..." << endl;
+      cout << "Starting the encoding of " << number_of_symbols_to_encode << " symbols..." << endl;
 
       /*pointer is useless*/
       unsigned char *justtocallread;
-      read_request(justtocallread);
+      read_request (justtocallread);
 
       ////////////////////////////////////ENCODING BLOB////////////////////////////////////
       for (unsigned int i = 0; i < number_of_symbols_to_encode; i++) {
 
 	encodings_mutex.lock ();
-	if(encoding_iter != encodings.end()) {
-	  encodings_mutex.unlock ();
+
+	encoding_iter = encodings.find (request->push_payload.start_storage.hash_code);
+
+	if (encoding_iter != encodings.end ()) {
 
 	  /*symbol created*/
 	  symbol *sym = enc.encode_next (encoding_iter->second);
@@ -259,7 +260,6 @@ client::write_start_storage_request (const boost::system::error_code& err, std::
 	  redColor ("client");
 	  cout << "Times inside here: " << i + 1 << endl;
 
-
 //	  yellowColor ("client");
 //	  cout << "r_s: sending to DataServer: " << ds_endpoint.address ().to_string () << ":" << ds_endpoint.port () << endl;
 //	  yellowColor("client");
@@ -273,21 +273,27 @@ client::write_start_storage_request (const boost::system::error_code& err, std::
 //	  yellowColor("client");
 //	  cout << "r_s: Seed : " << sym->seed << endl;
 
-	  socket_udp.async_send_to (buffer_store, ds_endpoint, boost::bind (&client::symbol_request_written, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, sym, request, request_symbol, encoded_hash));
+	  socket_udp.async_send_to (
+	      buffer_store, ds_endpoint,
+	      boost::bind (&client::symbol_request_written, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, sym, request, request_symbol, encoded_hash));
 
-
-	} else {
-	  redColor("symbol DECODED");
 	  encodings_mutex.unlock ();
+	} else {
+	  redColor ("Symbol DECODED");
 	  break;
+	  /*if blob is decoded free request - no longer needed*/
+	  free(request);
+	  encodings_mutex.unlock ();
+
 	}
       }
     } else {
 
       redColor ("client");
       cout << ": NOT FOUND" << endl;
-      socket_udp.async_send_to (buffer (request, sizeof(request->hdr) + request->hdr.payload_length), ds_endpoint,
-				boost::bind (&client::write_start_storage_request, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, request, ds_endpoint, encoded_hash));
+      socket_udp.async_send_to (
+	  buffer (request, sizeof(request->hdr) + request->hdr.payload_length), ds_endpoint,
+	  boost::bind (&client::write_start_storage_request, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, request, ds_endpoint, encoded_hash));
       encodings_mutex.unlock ();
     }
   } else {
@@ -297,12 +303,13 @@ client::write_start_storage_request (const boost::system::error_code& err, std::
 }
 
 void
-client::symbol_request_written (const boost::system::error_code& err, std::size_t n, symbol *sym, struct push_protocol_packet *request, struct push_protocol_packet *request_symbol, size_t encoded_hash)
+client::symbol_request_written (const boost::system::error_code& err, std::size_t n, symbol *sym, struct push_protocol_packet *request, struct push_protocol_packet *request_symbol,
+				size_t encoded_hash)
 {
   if (!err) {
     greenColor ("client");
     cout << "symbol of encoded blob " << encoded_hash << " written" << endl;
-    free (sym);
+    delete sym;
     //free (request);
     free (request_symbol);
   } else {
@@ -312,17 +319,15 @@ client::symbol_request_written (const boost::system::error_code& err, std::size_
 }
 
 void
-client::start_storage_request_written (const boost::system::error_code& err, std::size_t n , struct push_protocol_packet *request)
+client::start_storage_request_written (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request)
 {
-  if(!err)
-  {
+  if (!err) {
     greenColor ("client");
     cout << "::start_storage_request_written() successfully" << endl;
   } else {
     redColor ("client");
     cout << ": start_storage_request_written: " << err.message () << endl;
   }
-
 
 }
 
@@ -335,8 +340,9 @@ client::read_request (unsigned char* blob_to_encode)
 
   struct push_protocol_packet *request = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
 
-  socket_udp.async_receive_from (boost::asio::buffer (request, sizeof(struct push_protocol_packet)), sender_endpoint_,
-				 boost::bind (&client::handle_request, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, request, blob_to_encode, sender_endpoint_));
+  socket_udp.async_receive_from (
+      boost::asio::buffer (request, sizeof(struct push_protocol_packet)), sender_endpoint_,
+      boost::bind (&client::handle_request, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, request, blob_to_encode, sender_endpoint_));
 
 }
 
@@ -356,9 +362,9 @@ client::handle_request (const boost::system::error_code& err, std::size_t n, str
 
 	encoding_state *enc_state = enc.init_state (blob_id, BLOB_SIZE, blob_to_encode);
 
-	encodings_mutex.lock();
+	encodings_mutex.lock ();
 	encodings.insert (make_pair (request->push_payload.start_storage.hash_code, enc_state));
-	encodings_mutex.unlock();
+	encodings_mutex.unlock ();
 
 	break;
       }
@@ -367,9 +373,17 @@ client::handle_request (const boost::system::error_code& err, std::size_t n, str
 	greenColor ("client");
 	cout << ": STOP STORAGE for " << request->push_payload.start_storage.hash_code << endl;
 
-	encodings_mutex.lock();
-	encodings.erase(request->push_payload.start_storage.hash_code);
-	encodings_mutex.unlock();
+	encodings_iterator encoding_iter;
+
+	encodings_mutex.lock ();
+	encoding_iter = encodings.find (request->push_payload.start_storage.hash_code);
+	if (encoding_iter != encodings.end ()) {
+	  delete encoding_iter->second;
+	  encodings.erase (encoding_iter);
+	  encodings_mutex.unlock ();
+	} else {
+	  encodings_mutex.unlock ();
+	}
 
 	struct push_protocol_packet *response = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
 
@@ -386,9 +400,9 @@ client::handle_request (const boost::system::error_code& err, std::size_t n, str
 
 	yellowColor ("client");
 	cout << "r_s: sending to DataServer: " << sender_endpoint_.address ().to_string () << ":" << sender_endpoint_.port () << endl;
-	yellowColor("client");
+	yellowColor ("client");
 	cout << "r_s: request size: " << response->hdr.payload_length << " bytes." << endl;
-	yellowColor("client");
+	yellowColor ("client");
 	cout << "r_s: request type: " << (int) response->hdr.type << endl;
 
 	socket_udp.async_send_to (buffer_write, sender_endpoint_,
@@ -411,16 +425,15 @@ client::handle_request (const boost::system::error_code& err, std::size_t n, str
   //free (blob_to_encode);
 }
 void
-client::stop_storage_request_written(const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *response)
+client::stop_storage_request_written (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *response)
 {
-  if(!err)
-  {
-    greenColor("client");
+  if (!err) {
+    greenColor ("client");
     cout << "stop_storage_request_written()" << endl;
   } else {
 
   }
-  free(response);
+  free (response);
 }
 
 void

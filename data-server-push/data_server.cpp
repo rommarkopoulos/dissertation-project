@@ -125,16 +125,16 @@ data_server::handle_request (const boost::system::error_code& error, std::size_t
 	posix_memalign ((void **) &decoded_blob, 16, BLOB_SIZE);
 	memset (decoded_blob, 0, BLOB_SIZE);
 
-	decodings_mutex.lock();
+	decodings_mutex.lock ();
 	decodings_iterator decoding_iter = decodings.find (request->push_payload.start_storage.hash_code);
 	if (decoding_iter != decodings.end ()) {
 	  yellowColor ("data_server");
 	  cout << "Already decoding file: " << request->push_payload.start_storage.hash_code << endl;
-	  decodings_mutex.unlock();
+	  decodings_mutex.unlock ();
 	} else {
 	  decoding_state *dec_state = dec.init_state (blob_id, BLOB_SIZE, decoded_blob);
 	  decodings.insert (make_pair (request->push_payload.start_storage.hash_code, dec_state));
-	  decodings_mutex.unlock();
+	  decodings_mutex.unlock ();
 	}
 
 	struct push_protocol_packet *response = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
@@ -150,7 +150,8 @@ data_server::handle_request (const boost::system::error_code& error, std::size_t
 	buffer_write.push_back (buffer (response, sizeof(response->hdr) + response->hdr.payload_length));
 	buffer_write.push_back (buffer (padding, SYMBOL_SIZE + PADDING));
 
-	udp_socket_.async_send_to (buffer_write, sender_endpoint_, boost::bind (&data_server::nothing, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, response));
+	udp_socket_.async_send_to (buffer_write, sender_endpoint_,
+				   boost::bind (&data_server::start_storage_ok_request_written, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, response));
 
 	break;
       }
@@ -159,24 +160,24 @@ data_server::handle_request (const boost::system::error_code& error, std::size_t
 	greenColor ("data_server");
 	cout << ": SYMBOL" << endl;
 
+	/*NEED TO BE FREED*/
 	symbol *sym = new symbol ();
 
 	sym->seed = request->push_payload.symbol_data.seed;
 	sym->symbol_data = symbol_data;
 
-	yellowColor("data_server");
+	yellowColor ("data_server");
 	cout << ": Symbol for : " << request->push_payload.symbol_data.hash_code << endl;
-	yellowColor("data_server");
+	yellowColor ("data_server");
 	cout << ": Blob size : " << request->push_payload.symbol_data.blob_size << endl;
-	yellowColor("data_server");
+	yellowColor ("data_server");
 	cout << ": Seed : " << sym->seed << endl;
 
-	decodings_mutex.lock();
+	decodings_mutex.lock ();
 	decodings_iterator decoding_iter = decodings.find (request->push_payload.start_storage.hash_code);
 	if (dec.decode_next (decoding_iter->second, sym) == true) {
-	  greenColor ("client");
+	  greenColor ("data_server");
 	  greenColor ("DECODED!");
-
 
 	  string decoded_blob_str ((const char *) decoding_iter->second->blob, BLOB_SIZE);
 	  boost::hash<string> decoded_blob_str_hash;
@@ -196,22 +197,29 @@ data_server::handle_request (const boost::system::error_code& error, std::size_t
 	  buffer_write.push_back (buffer (response, sizeof(response->hdr) + response->hdr.payload_length));
 	  buffer_write.push_back (buffer (padding, SYMBOL_SIZE + PADDING));
 
-	  udp_socket_.async_send_to (buffer_write, sender_endpoint_, boost::bind (&data_server::nothing, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, response));
-	  decodings_mutex.unlock();
+	  udp_socket_.async_send_to (buffer_write, sender_endpoint_,
+				     boost::bind (&data_server::stop_storage_request_written, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, response));
+	  decodings_mutex.unlock ();
 	} else {
-
-	  decodings_mutex.unlock();
+	  decodings_mutex.unlock ();
 	}
-	//free(sym);
+	//
 	break;
       }
       case STOP_STORAGE_OK:
       {
 	greenColor ("data_server");
 	cout << ": STOP_STORAGE_OK for " << request->push_payload.stop_storage_ok.hash_code << endl;
-//	decodings_mutex.lock();
-//	decodings.erase(request->push_payload.start_storage.hash_code);
-//	decodings_mutex.unlock();
+	decodings_mutex.lock();
+	decodings_iterator decoding_iter = decodings.find(request->push_payload.start_storage.hash_code);
+	if (decoding_iter != decodings.end ()) {
+	  delete decoding_iter->second;
+	  decodings.erase(decoding_iter);
+	  decodings_mutex.unlock();
+	} else {
+	  cout << ":Decoding state did not found!" << endl;
+	  decodings_mutex.unlock();
+	}
 	break;
       }
       default:
@@ -229,10 +237,20 @@ data_server::handle_request (const boost::system::error_code& error, std::size_t
 }
 
 void
-data_server::nothing (const boost::system::error_code& error, std::size_t bytes_transferred, struct push_protocol_packet *request)
+data_server::start_storage_ok_request_written (const boost::system::error_code& error, std::size_t bytes_transferred, struct push_protocol_packet *response)
 {
   greenColor ("data_server");
-  cout << "::nothing()" << endl;
+  cout << "::start_storage_ok_request_written()" << endl;
+  free (response);
+}
+
+void
+data_server::stop_storage_request_written (const boost::system::error_code& error, std::size_t bytes_transferred, struct push_protocol_packet *response)
+{
+  greenColor ("data_server");
+  cout << "::start_storage_ok_request_written()" << endl;
+  free (response);
+  //free (sym);
 }
 
 void
