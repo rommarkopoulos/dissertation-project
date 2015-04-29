@@ -53,9 +53,11 @@ typedef map<uint32_t, decoding_state*>::iterator decodings_iterator;
 
 struct stored_data
 {
-  char* data;
+  unsigned char* data;
   uint32_t data_length;
 };
+
+typedef map<uint32_t, stored_data>::iterator storage_iterator;
 
 class data_server : public boost::enable_shared_from_this<data_server>, private boost::noncopyable
 {
@@ -94,10 +96,19 @@ public:
   handle_request (const boost::system::error_code& error, std::size_t bytes_transferred, struct push_protocol_packet *request, unsigned char *symbol_data);
 
   void
-  start_storage_ok_request_written (const boost::system::error_code& error, std::size_t bytes_transferred, struct push_protocol_packet *response);
+  start_storage_ok_request_written (const boost::system::error_code& err, std::size_t bytes_transferred, struct push_protocol_packet *response);
 
   void
-  stop_storage_request_written (const boost::system::error_code& error, std::size_t bytes_transferred, struct push_protocol_packet *response);
+  start_fetch_ok_request_written (const boost::system::error_code& err, std::size_t bytes_transferred, struct push_protocol_packet *response, boost::asio::ip::udp::endpoint sender_endpoint_);
+
+  void
+  stop_storage_request_written (const boost::system::error_code& err, std::size_t bytes_transferred, struct push_protocol_packet *response);
+
+  void
+  stop_fetch_ok_request_written (const boost::system::error_code& err, std::size_t bytes_transferred, struct push_protocol_packet *response);
+
+  void
+  symbol_request_written (const boost::system::error_code& err, std::size_t n, symbol *sym, struct push_protocol_packet *request_symbol);
 
   /*color for terminal*/
   void
@@ -108,6 +119,9 @@ public:
 
   void
   yellowColor (string text);
+
+  string
+  sizeToString(size_t sz);
 
   /* size of thread pool */
   size_t pool_size_;
@@ -140,6 +154,7 @@ public:
   /* data-server specific variables */
   /* TODO: romanos this must be guarded against concurrent usage*/
   map<uint32_t, stored_data> storage;
+  boost::mutex storage_mutex;
 
   /*FOUNTAIN CODES*/
   boost::random_device rd;

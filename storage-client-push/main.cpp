@@ -12,7 +12,7 @@ void
 data_stored (const system::error_code& err, uint32_t &hash_code, string name, char *data)
 {
   if (!err) {
-    cout << "main: data with name " << name << " were successfully stored - " << hash_code <<  endl;
+    cout << "main: data with name " << name << " were successfully stored - " << hash_code << endl;
   } else {
     cout << "main: error in storing data with name " << name << ", " << err.message () << endl;
   }
@@ -61,20 +61,19 @@ main (int argc, char *argv[])
 //  data = (char *) malloc (length);
 //  client.store_data (name, 1, data, length, bind (&data_stored, _1, _2, name, data));
 ////
-////  //sleep (5);
-////
-//  client.fetch_data (name, bind (&data_fetched, _1, _2, _3, _4, name));
+  sleep (5);
 
+  client.fetch_data (name, bind (&data_fetched, _1, _2, _3, _4, name));
 
   /*sleep (5);
 
-  string non_existent_name ("non-existent name");
-  client.fetch_data (non_existent_name.c_str (), bind (&data_fetched, _1, _2, _3, _4, non_existent_name.c_str ()));
+   string non_existent_name ("non-existent name");
+   client.fetch_data (non_existent_name.c_str (), bind (&data_fetched, _1, _2, _3, _4, non_existent_name.c_str ()));
 
-  sleep (5);
-*/
-  client.exit ();
-
+   sleep (5);
+   */
+  /*uncomment to exit like before*/
+  //client.exit ();
   client.join ();
 
   return 0;

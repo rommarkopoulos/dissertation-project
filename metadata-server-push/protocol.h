@@ -8,7 +8,7 @@
 #define FETCH_RESOLUTION_REQ 	0x03
 #define RESOLUTION_RESP 	0x04
 
-#define OK 			0x00
+#define OK 			0x20
 
 struct __attribute__((__packed__)) header
 {
