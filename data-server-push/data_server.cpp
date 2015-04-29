@@ -81,8 +81,8 @@ void
 data_server::read_request ()
 {
 
-  greenColor ("data_server");
-  cout << "read_request()" << endl;
+//  greenColor ("data_server");
+//  cout << "read_request()" << endl;
 
   struct push_protocol_packet *request = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
 
@@ -306,6 +306,8 @@ data_server::handle_request (const boost::system::error_code& error, std::size_t
 	    cout << "Hash of data = ";
 	    greenColor (data_hash);
 	    cout << endl;
+	    cout << endl;
+	    cout << endl;
 	    storage_mutex.unlock ();
 	  } else {
 	    redColor ("data_server");
@@ -339,15 +341,17 @@ data_server::handle_request (const boost::system::error_code& error, std::size_t
 
 	encodings_iterator encoding_iter;
 
-//	encodings_mutex.lock ();
-//	encoding_iter = encodings.find (request->push_payload.start_storage.hash_code);
-//	if (encoding_iter != encodings.end ()) {
-//	  delete encoding_iter->second;
-//	  encodings.erase (encoding_iter);
-//	  encodings_mutex.unlock ();
-//	} else {
-//	  encodings_mutex.unlock ();
-//	}
+	encodings_mutex.lock ();
+	encoding_iter = encodings.find (request->push_payload.start_storage.hash_code);
+	if (encoding_iter != encodings.end ()) {
+	  delete encoding_iter->second;
+	  encodings.erase (encoding_iter);
+	  greenColor("data_server");
+	  cout << "Encoding State Deleted! ------------> size of encodings: " << encodings.size() << endl;
+	  encodings_mutex.unlock ();
+	} else {
+	  encodings_mutex.unlock ();
+	}
 
 	struct push_protocol_packet *response = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
 
@@ -423,11 +427,19 @@ data_server::start_fetch_ok_request_written (const boost::system::error_code& er
 
     encodings_iterator encoding_iter;
 
-    number_of_symbols_to_encode = 500;
+    number_of_symbols_to_encode = 2000;
 
     encodings_mutex.lock ();
 
     encoding_iter = encodings.find(response->push_payload.start_fetch_ok.hash_code);
+
+    ///////////////////////////////////HASH OF BLOB///////////////////////////////////
+    string blob_to_encode_str ((const char *) encoding_iter->second->blob, BLOB_SIZE);
+    boost::hash<std::string> blob_to_encode_str_hash;
+    std::size_t encoded_hash = blob_to_encode_str_hash (blob_to_encode_str);
+    string enc_hash = sizeToString (encoded_hash);
+    //////////////////////////////////////////////////////////////////////////////////
+
 
     if (encoding_iter != encodings.end ()) {
 
@@ -450,6 +462,7 @@ data_server::start_fetch_ok_request_written (const boost::system::error_code& er
 
 	  symbol *sym = enc.encode_next (encoding_iter->second);
 
+
 	  struct push_protocol_packet *request_symbol = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
 
 	  request_symbol->hdr.payload_length = sizeof(request_symbol->push_payload.symbol_data) + SYMBOL_SIZE;
@@ -463,23 +476,23 @@ data_server::start_fetch_ok_request_written (const boost::system::error_code& er
 	  buffer_store.push_back (boost::asio::buffer (request_symbol, sizeof(request_symbol->hdr) + sizeof(request_symbol->push_payload.symbol_data)));
 	  buffer_store.push_back (boost::asio::buffer (sym->symbol_data, SYMBOL_SIZE));
 
+//	  redColor ("client");
+//	  cout << "Times inside here: " << i + 1 << endl;
+
 	  udp_socket_.async_send_to (buffer_store, sender_endpoint_,
 				     boost::bind (&data_server::symbol_request_written, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, sym, request_symbol));
 
 	  encodings_mutex.unlock ();
 	} else {
-	  /////////////////////////////////HASH OF BLOB/////////////////////////////////
-	  string blob_to_encode_str ((const char *) encoding_iter->second, BLOB_SIZE);
-	  boost::hash<std::string> blob_to_encode_str_hash;
-	  std::size_t encoded_hash = blob_to_encode_str_hash (blob_to_encode_str);
-	  string enc_hash = sizeToString (encoded_hash);
-	  //////////////////////////////////////////////////////////////////////////////
 	  greenColor ("client");
-	  cout << "Data of blob " << response->push_payload.start_storage.hash_code << " was succesfully stored" << endl;
+	  cout << "Data of blob " << response->push_payload.start_storage.hash_code << " was succesfully send" << endl;
 	  greenColor ("client");
 	  cout << "Hash of data = ";
 	  greenColor (enc_hash);
 	  cout << endl;
+	  cout << endl;
+	  cout << endl;
+
 	  break;
 	  /*if blob is decoded free request - no longer needed*/
 	  free (response);

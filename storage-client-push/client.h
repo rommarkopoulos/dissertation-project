@@ -86,12 +86,11 @@ public:
 				storage_callback storage_cb);
 
   void
-  write_start_storage_request (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request, boost::asio::ip::udp::endpoint ds_endpoint, size_t encoded_blob);
+  start_storage_request_written (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request,  boost::asio::ip::udp::endpoint ds_endpoint, size_t encoded_hash);
 
   void
-  check_write_start_storage_request_written (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request,  boost::asio::ip::udp::endpoint ds_endpoint, size_t encoded_hash);
-  void
-  start_storage_request_written (const boost::system::error_code&, std::size_t, struct push_protocol_packet *request);
+  write_start_storage_request (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request, boost::asio::ip::udp::endpoint ds_endpoint, size_t encoded_blob);
+
 
   void
   stop_storage_ok_request_written (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *response);
@@ -114,10 +113,10 @@ public:
   fetch_request_written (const boost::system::error_code& err, char *data, uint32_t &length, u_int32_t hash_code, fetch_callback fetch_cb);
 
   void
-  write_start_fetch_request(const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request, boost::asio::ip::udp::endpoint ds_endpoint);
+  start_fetch_request_written(const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request, boost::asio::ip::udp::endpoint ds_endpoint);
 
   void
-  check_write_start_fetch_request_written(const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request,  boost::asio::ip::udp::endpoint ds_endpoint);
+  write_start_fetch_request(const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request, boost::asio::ip::udp::endpoint ds_endpoint);
 
   void
   stop_fetch_request_written(const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *response);

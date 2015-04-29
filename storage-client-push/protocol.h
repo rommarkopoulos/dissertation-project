@@ -22,7 +22,7 @@
 #define OK 			0x20
 
 #define BLOB_ID_SIZE 32
-#define BLOB_SIZE 1024 * 1
+#define BLOB_SIZE 1024 * 100
 #define PADDING 8
 
 struct __attribute__((__packed__)) header

@@ -61,7 +61,7 @@ main (int argc, char *argv[])
 //  data = (char *) malloc (length);
 //  client.store_data (name, 1, data, length, bind (&data_stored, _1, _2, name, data));
 ////
-  sleep (5);
+  sleep (10);
 
   client.fetch_data (name, bind (&data_fetched, _1, _2, _3, _4, name));
 
