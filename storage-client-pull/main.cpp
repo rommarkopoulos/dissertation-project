@@ -51,7 +51,7 @@ main (int argc, char *argv[])
 
   sleep(10);
 
-client.store_data ("Rom", 1, data, length, bind (&data_stored, _1, _2, name, data));
+  //client.store_data ("Rom", 1, data, length, bind (&data_stored, _1, _2, name, data));
 
 
 //
