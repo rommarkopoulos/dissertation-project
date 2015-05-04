@@ -45,6 +45,8 @@ typedef boost::shared_ptr<client_session> client_session_ptr;
 typedef std::map<uint32_t, encoding_state*>::iterator encodings_iterator;
 typedef std::map<uint32_t, decoding_state*>::iterator decodings_iterator;
 
+typedef std::map<uint32_t, bool>::iterator isDecoded_iterator;
+
 typedef std::map<uint32_t, unsigned char *>::iterator blobs_to_encode_iterator;
 
 typedef boost::function<void
@@ -86,17 +88,22 @@ public:
 				storage_callback storage_cb);
 
   void
-  start_storage_request_written (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request,  boost::asio::ip::udp::endpoint ds_endpoint, size_t encoded_hash);
+  start_storage_request_written (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request, boost::asio::ip::udp::endpoint ds_endpoint, size_t encoded_hash);
 
   void
   write_start_storage_request (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request, boost::asio::ip::udp::endpoint ds_endpoint, size_t encoded_blob);
-
 
   void
   stop_storage_ok_request_written (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *response, size_t encoded_hash);
 
   void
   symbol_request_written (const boost::system::error_code& err, std::size_t n, symbol *sym, struct push_protocol_packet *request, struct push_protocol_packet *request_symbol);
+
+  void
+  send_data_request (uint32_t hash_code_);
+
+  void
+  send_data_request_written (const boost::system::error_code& err, std::size_t bytes_transferred, struct push_protocol_packet *request);
 
   void
   storage_request_written (const boost::system::error_code& err, boost::shared_ptr<u_int8_t> replicas_ptr, u_int32_t hash_code, storage_callback storage_cb);
@@ -113,13 +120,13 @@ public:
   fetch_request_written (const boost::system::error_code& err, char *data, uint32_t &length, u_int32_t hash_code, fetch_callback fetch_cb);
 
   void
-  start_fetch_request_written(const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request, boost::asio::ip::udp::endpoint ds_endpoint);
+  start_fetch_request_written (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request, boost::asio::ip::udp::endpoint ds_endpoint);
 
   void
-  write_start_fetch_request(const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request, boost::asio::ip::udp::endpoint ds_endpoint);
+  write_start_fetch_request (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request, boost::asio::ip::udp::endpoint ds_endpoint);
 
   void
-  stop_fetch_request_written(const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *response);
+  stop_fetch_request_written (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *response);
 
   /*Read and Handle requests Methods*/
   void
@@ -195,6 +202,10 @@ public:
   decoder dec;
   std::map<uint32_t, decoding_state *> decodings;
   boost::mutex decodings_mutex;
+  boost::asio::deadline_timer request_symbol_timer_;
+
+  std::map<uint32_t, bool> isDecoded;
+  boost::mutex isDecoded_mutex;
 };
 
 #endif /* CLIENT_H_ */

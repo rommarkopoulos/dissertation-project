@@ -47,11 +47,11 @@ main (int argc, char *argv[])
   char *data = (char *) malloc (length);
   uint8_t replicas = 1;
 
-  //client.store_data (name, 1, data, length, bind (&data_stored, _1, _2, name, data));
+  client.store_data (name, 1, data, length, bind (&data_stored, _1, _2, name, data));
 
-  //sleep(10);
+  sleep(10);
 
-  client.store_data ("Rom", 1, data, length, bind (&data_stored, _1, _2, name, data));
+client.store_data ("Rom", 1, data, length, bind (&data_stored, _1, _2, name, data));
 
 
 //
@@ -69,11 +69,13 @@ main (int argc, char *argv[])
 ////
 //  sleep (10);
 //
-//  client.fetch_data (name, bind (&data_fetched, _1, _2, _3, _4, name));
+  client.fetch_data (name, bind (&data_fetched, _1, _2, _3, _4, name));
 
-  /*sleep (5);
+  sleep (5);
 
-   string non_existent_name ("non-existent name");
+  client.store_data ("Rom", 1, data, length, bind (&data_stored, _1, _2, name, data));
+
+   /*string non_existent_name ("non-existent name");
    client.fetch_data (non_existent_name.c_str (), bind (&data_fetched, _1, _2, _3, _4, non_existent_name.c_str ()));
 
    sleep (5);

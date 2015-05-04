@@ -289,6 +289,163 @@ data_server::handle_request (const boost::system::error_code& error, std::size_t
 
 	break;
       }
+      case START_FETCH:
+      {
+	greenColor ("data_server");
+	cout << "handle_request()" << endl;
+	yellowColor ("data_server");
+	cout << ": sender info: " << sender_endpoint_.address ().to_string () << ":" << sender_endpoint_.port () << endl;
+	yellowColor ("data_server");
+	cout << ": request size: " << request->hdr.payload_length << endl;
+	yellowColor ("data_server");
+	cout << ": request type: " << (int) request->hdr.type << endl;
+	greenColor ("data_server");
+	cout << ": START FETCH for " << request->push_payload.start_fetch.hash_code << endl;
+
+	////////////////////////////////////Creating Encoding State////////////////////////////////////
+	encodings_iterator encoding_iter;
+
+	encodings_mutex.lock ();
+
+	encoding_iter = encodings.find (request->push_payload.start_fetch.hash_code);
+
+	if (encoding_iter != encodings.end ()) {
+	  yellowColor ("data_server");
+	  cout << "Already encoding file: " << request->push_payload.start_fetch.hash_code << endl;
+	  encodings_mutex.unlock ();
+	} else {
+	  storage_iterator storage_iter;
+	  storage_mutex.lock ();
+	  storage_iter = storage.find (request->push_payload.start_fetch.hash_code);
+	  if (storage_iter != storage.end ()) {
+	    encoding_state *enc_state = enc.init_state (blob_id, storage_iter->second.data_length, storage_iter->second.data);
+	    encodings.insert (make_pair (request->push_payload.start_fetch.hash_code, enc_state));
+	    storage_mutex.unlock ();
+	  } else {
+	    redColor ("data_server");
+	    cout << "Could not find file " << request->push_payload.start_fetch.hash_code << endl;
+	    storage_mutex.unlock ();
+	  }
+	  encodings_mutex.unlock ();
+	}
+	///////////////////////////////////////////////////////////////////////////////////////////////
+
+	struct push_protocol_packet *response = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
+
+	response->hdr.payload_length = sizeof(request->push_payload.start_fetch_ok);
+	response->hdr.type = START_FETCH_OK;
+	response->push_payload.start_fetch_ok.hash_code = request->push_payload.start_fetch.hash_code;
+
+	char *padding = (char *) malloc (SYMBOL_SIZE + PADDING);
+
+	vector<boost::asio::mutable_buffer> buffer_write;
+
+	buffer_write.push_back (buffer (response, sizeof(response->hdr) + response->hdr.payload_length));
+	buffer_write.push_back (buffer (padding, SYMBOL_SIZE + PADDING));
+
+	udp_socket_.async_send_to (
+	    buffer_write, sender_endpoint_,
+	    boost::bind (&data_server::start_fetch_ok_request_written, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, response, sender_endpoint_));
+
+	break;
+      }
+      case SEND_NEXT:
+      {
+	greenColor ("data_server");
+	cout << ": SEND NEXT for " << request->push_payload.start_storage.hash_code << endl;
+
+	encodings_iterator encoding_iter;
+
+	encodings_mutex.lock ();
+
+	encoding_iter = encodings.find (request->push_payload.start_storage.hash_code);
+
+	if (encoding_iter != encodings.end ()) {
+	  symbol *sym = enc.encode_next (encoding_iter->second);
+
+	  struct push_protocol_packet *request_symbol = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
+
+	  request_symbol->hdr.payload_length = sizeof(request_symbol->push_payload.symbol_data) + SYMBOL_SIZE;
+	  request_symbol->hdr.type = SYMBOL_DATA;
+	  request_symbol->push_payload.symbol_data.hash_code = request->push_payload.start_storage.hash_code;
+	  request_symbol->push_payload.symbol_data.blob_size = BLOB_SIZE;
+	  request_symbol->push_payload.symbol_data.seed = sym->seed;
+
+	  vector<boost::asio::mutable_buffer> buffer_store;
+
+	  buffer_store.push_back (boost::asio::buffer (request_symbol, sizeof(request_symbol->hdr) + sizeof(request_symbol->push_payload.symbol_data)));
+	  buffer_store.push_back (boost::asio::buffer (sym->symbol_data, SYMBOL_SIZE));
+
+	  udp_socket_.async_send_to (buffer_store, sender_endpoint_,
+				     boost::bind (&data_server::symbol_request_written, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, sym, request_symbol));
+	  encodings_mutex.unlock ();
+	} else {
+	  redColor ("client");
+	  cout << "Encoding State did not found!" << endl;
+	  encodings_mutex.unlock ();
+	}
+	break;
+      }
+      case STOP_FETCH:
+      {
+	greenColor ("data_server");
+	cout << ": STOP FETCH for " << request->push_payload.start_storage.hash_code << endl;
+
+	encodings_iterator encoding_iter;
+
+	encodings_mutex.lock ();
+	encoding_iter = encodings.find (request->push_payload.start_storage.hash_code);
+
+	///////////////////////////////////////// HASH OF BLOB /////////////////////////////////////////
+	string encoded_blob_str ((const char *) encoding_iter->second->blob, BLOB_SIZE);
+	boost::hash<string> encoded_blob_str_hash;
+	std::size_t e = encoded_blob_str_hash (encoded_blob_str);
+	////////////////////////////////////////////////////////////////////////////////////////////////
+
+	greenColor ("data_servwer");
+	cout << "Successfully sent to " << sender_endpoint_.address ().to_string () << ":" << sender_endpoint_.port () << " " << encoding_iter->second->blob_size << " bytes for "
+	    << request->push_payload.stop_fetch.hash_code << endl;
+	string data_hash = sizeToString (e);
+	greenColor ("data_server");
+	cout << "Hash of data = ";
+	greenColor (data_hash);
+	cout << endl;
+	cout << endl;
+	cout << endl;
+
+	if (encoding_iter != encodings.end ()) {
+	  delete encoding_iter->second;
+	  encodings.erase (encoding_iter);
+	  encodings_mutex.unlock ();
+	} else {
+	  encodings_mutex.unlock ();
+	}
+
+	struct push_protocol_packet *response = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
+
+	response->hdr.payload_length = sizeof(response->push_payload.stop_fetch_ok) + PADDING + SYMBOL_SIZE;
+	response->hdr.type = STOP_FETCH_OK;
+	response->push_payload.stop_fetch_ok.hash_code = request->push_payload.stop_fetch.hash_code;
+
+	char *padding = (char *) malloc (SYMBOL_SIZE + PADDING);
+
+	vector<boost::asio::mutable_buffer> buffer_write;
+
+	buffer_write.push_back (buffer (response, sizeof(response->hdr) + sizeof(response->push_payload.stop_fetch_ok)));
+	buffer_write.push_back (buffer (padding, SYMBOL_SIZE + PADDING));
+
+	yellowColor ("client");
+	cout << "r_s: sending to DataServer: " << sender_endpoint_.address ().to_string () << ":" << sender_endpoint_.port () << endl;
+	yellowColor ("client");
+	cout << "r_s: request size: " << response->hdr.payload_length << " bytes." << endl;
+	yellowColor ("client");
+	cout << "r_s: request type: " << (int) response->hdr.type << endl;
+
+	udp_socket_.async_send_to (buffer_write, sender_endpoint_,
+				   boost::bind (&data_server::stop_fetch_ok_request_written, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, response));
+
+	break;
+      }
       default:
 	redColor ("data_server");
 	cout << ": fatal - unknown request" << endl;
@@ -386,88 +543,11 @@ data_server::start_fetch_ok_request_written (const boost::system::error_code& er
   if (!err) {
     greenColor ("data_server");
     cout << "start_fetch_ok_request_written()" << endl;
-
-    encodings_iterator encoding_iter;
-
-    number_of_symbols_to_encode = 2000;
-
-    encodings_mutex.lock ();
-
-    encoding_iter = encodings.find (response->push_payload.start_fetch_ok.hash_code);
-
-    ///////////////////////////////////HASH OF BLOB///////////////////////////////////
-    string blob_to_encode_str ((const char *) encoding_iter->second->blob, BLOB_SIZE);
-    boost::hash<std::string> blob_to_encode_str_hash;
-    std::size_t encoded_hash = blob_to_encode_str_hash (blob_to_encode_str);
-    string enc_hash = sizeToString (encoded_hash);
-    //////////////////////////////////////////////////////////////////////////////////
-
-    if (encoding_iter != encodings.end ()) {
-
-      encodings_mutex.unlock ();
-
-      yellowColor ("data_server");
-      cout << ": ";
-      greenColor ("Encoding State Found");
-      cout << endl;
-      yellowColor ("data_server");
-      cout << "Starting the encoding of " << number_of_symbols_to_encode << " symbols for " << response->push_payload.start_fetch_ok.hash_code << endl;
-
-      ////////////////////////////////////ENCODING BLOB////////////////////////////////////
-      for (unsigned int i = 0; i < number_of_symbols_to_encode; i++) {
-
-	encodings_mutex.lock ();
-
-	encoding_iter = encodings.find (response->push_payload.start_fetch_ok.hash_code);
-	if (encoding_iter != encodings.end ()) {
-
-	  symbol *sym = enc.encode_next (encoding_iter->second);
-
-	  struct push_protocol_packet *request_symbol = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
-
-	  request_symbol->hdr.payload_length = sizeof(request_symbol->push_payload.symbol_data) + SYMBOL_SIZE;
-	  request_symbol->hdr.type = SYMBOL_DATA;
-	  request_symbol->push_payload.symbol_data.hash_code = response->push_payload.start_fetch.hash_code;
-	  request_symbol->push_payload.symbol_data.blob_size = BLOB_SIZE;
-	  request_symbol->push_payload.symbol_data.seed = sym->seed;
-
-	  vector<boost::asio::mutable_buffer> buffer_store;
-
-	  buffer_store.push_back (boost::asio::buffer (request_symbol, sizeof(request_symbol->hdr) + sizeof(request_symbol->push_payload.symbol_data)));
-	  buffer_store.push_back (boost::asio::buffer (sym->symbol_data, SYMBOL_SIZE));
-
-//	  redColor ("client");
-//	  cout << "Times inside here: " << i + 1 << endl;
-
-	  udp_socket_.async_send_to (buffer_store, sender_endpoint_,
-				     boost::bind (&data_server::symbol_request_written, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, sym, request_symbol));
-
-	  encodings_mutex.unlock ();
-	} else {
-	  greenColor ("client");
-	  cout << "Data of blob " << response->push_payload.start_storage.hash_code << " was succesfully send" << endl;
-	  greenColor ("client");
-	  cout << "Hash of data = ";
-	  greenColor (enc_hash);
-	  cout << endl;
-	  cout << endl;
-	  cout << endl;
-
-	  break;
-	  /*if blob is decoded free request - no longer needed*/
-	  free (response);
-	  encodings_mutex.unlock ();
-	}
-
-      }
-    } else {
-      redColor ("data_server");
-    }
-
   } else {
     redColor ("data_server");
     cout << ": start_fetch_ok_request_written: " << err.message () << endl;
   }
+  free (response);
 }
 
 void

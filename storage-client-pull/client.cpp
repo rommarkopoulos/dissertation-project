@@ -8,7 +8,8 @@ using namespace chrono;
 
 client::client (string mds_address, uint16_t mds_port, size_t pool_size_) :
     pool_size_ (pool_size_), signals_ (io_service_), work_ptr_ (new io_service::work (io_service_)), mds_endpoint_ (ip_v4::from_string (mds_address), mds_port), socket_udp (
-	io_service_, udp::endpoint (udp::v4 (), 4040)), start_storage_delay (io_service_, posix_time::seconds (2)), start_fetch_delay (io_service_, posix_time::seconds (4))
+	io_service_, udp::endpoint (udp::v4 (), 4040)), start_storage_delay (io_service_, posix_time::seconds (2)), start_fetch_delay (io_service_, posix_time::seconds (4)), request_symbol_timer_ (
+	io_service_, boost::posix_time::seconds (3))
 {
   cout << endl;
   cout << endl;
@@ -271,56 +272,13 @@ void
 client::start_fetch_request_written (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request, udp::endpoint ds_endpoint)
 {
   if (!err) {
-
-    start_fetch_delay.wait ();
-
-    decodings_iterator decoding_iter;
-
-    decodings_mutex.lock ();
-
-    decoding_iter = decodings.find (request->push_payload.start_fetch.hash_code);
-
-    if (decoding_iter != decodings.end ()) {
-      greenColor ("client");
-      cout << "start_fetch_request_written()" << endl;
-      decodings_mutex.unlock ();
-    } else {
-      redColor ("client");
-      cout << ": Decoding State Not Found" << endl;
-//      socket_udp.async_send_to (buffer (request, sizeof(request->hdr) + request->hdr.payload_length), ds_endpoint,
-//				boost::bind (&client::write_start_fetch_request, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, request, ds_endpoint));
-      decodings_mutex.unlock ();
-    }
+    greenColor ("client");
+    cout << ": start_fetch_request_written()" << endl;
 
   } else {
     redColor ("client");
     cout << ": start_fetch_request_written: " << err.message () << endl;
   }
-}
-
-void
-client::write_start_fetch_request (const boost::system::error_code& err, std::size_t n, struct push_protocol_packet *request, udp::endpoint ds_endpoint)
-{
-
-  if (!err) {
-    greenColor ("client");
-    cout << "write_start_fetch_request()" << endl;
-
-    char *padding = (char *) malloc (SYMBOL_SIZE + PADDING);
-
-    vector<boost::asio::mutable_buffer> buffer_write;
-
-    buffer_write.push_back (buffer (request, sizeof(request->hdr) + sizeof(request->push_payload.start_fetch)));
-    buffer_write.push_back (buffer (padding, SYMBOL_SIZE + PADDING));
-
-    socket_udp.async_send_to (buffer_write, ds_endpoint,
-			      boost::bind (&client::start_fetch_request_written, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, request, ds_endpoint));
-
-  } else {
-    redColor ("client");
-    cout << ": write_start_fetch_request: " << err.message () << endl;
-  }
-
 }
 
 void
@@ -474,6 +432,130 @@ client::handle_request (const boost::system::error_code& err, std::size_t n, str
 
 	break;
       }
+      case START_FETCH_OK:
+      {
+	greenColor ("client");
+	cout << ": START FETCH OK for " << request->push_payload.start_fetch.hash_code << endl;
+
+	unsigned char *decoded_blob;
+	posix_memalign ((void **) &decoded_blob, 16, BLOB_SIZE);
+	memset (decoded_blob, 0, BLOB_SIZE);
+
+	decodings_mutex.lock ();
+	isDecoded_mutex.lock ();
+	decodings_iterator decoding_iter = decodings.find (request->push_payload.start_fetch.hash_code);
+	if (decoding_iter != decodings.end ()) {
+	  yellowColor ("client");
+	  cout << "Already decoding file: " << request->push_payload.start_fetch.hash_code << endl;
+	  decodings_mutex.unlock ();
+	  isDecoded_mutex.unlock ();
+	} else {
+	  decoding_state *dec_state = dec.init_state (blob_id, BLOB_SIZE, decoded_blob);
+	  decodings.insert (make_pair (request->push_payload.start_fetch.hash_code, dec_state));
+	  decodings_mutex.unlock ();
+	  bool decoded = false;
+	  isDecoded.insert (make_pair (request->push_payload.start_storage.hash_code, decoded));
+	  isDecoded_mutex.unlock ();
+	}
+
+	uint32_t hash_code_ = request->push_payload.start_fetch_ok.hash_code;
+
+	request_symbol_timer_.async_wait (bind (&client::send_data_request, this, hash_code_));
+
+	break;
+      }
+      case SYMBOL_DATA:
+      {
+	//	greenColor ("client");
+	//	cout << ": SYMBOL" << endl;
+
+	symbol *sym = new symbol ();
+
+	sym->seed = request->push_payload.symbol_data.seed;
+	sym->symbol_data = symbol_data;
+
+	//	yellowColor ("client");
+	//	cout << ": Symbol for : " << request->push_payload.symbol_data.hash_code << endl;
+	//	yellowColor ("client");
+	//	cout << ": Blob size : " << request->push_payload.symbol_data.blob_size << endl;
+	//	yellowColor ("client");
+	//	cout << ": Seed : " << sym->seed << endl;
+
+	decodings_mutex.lock ();
+	decodings_iterator decoding_iter = decodings.find (request->push_payload.start_fetch.hash_code);
+	if (dec.decode_next (decoding_iter->second, sym) == true) {
+	  greenColor ("client");
+	  greenColor ("BLOB DECODED!");
+
+	  ///////////////////////////////////////// HASH OF BLOB /////////////////////////////////////////
+	  string decoded_blob_str ((const char *) decoding_iter->second->blob, BLOB_SIZE);
+	  boost::hash<string> decoded_blob_str_hash;
+	  std::size_t d = decoded_blob_str_hash (decoded_blob_str);
+	  cout << "---------------------->" << d << endl;
+	  ////////////////////////////////////////////////////////////////////////////////////////////////
+
+	  greenColor ("client");
+	  cout << "Successfully fetched " << decoding_iter->second->blob_size << " bytes for " << request->push_payload.start_storage.hash_code << endl;
+	  string data_hash = sizeToString (d);
+	  greenColor ("client");
+	  cout << "Hash of data = ";
+	  greenColor (data_hash);
+	  cout << endl;
+	  cout << endl;
+	  cout << endl;
+
+	  ////////////////////////////////////// DELETE CHECKER //////////////////////////////////////////
+	  isDecoded_mutex.lock ();
+	  isDecoded_iterator isDecoded_iter = isDecoded.find (request->push_payload.start_fetch.hash_code);
+	  if (isDecoded_iter != isDecoded.end ()) {
+	    isDecoded.erase (isDecoded_iter);
+	    isDecoded_mutex.unlock ();
+	  } else {
+	    isDecoded_mutex.unlock ();
+	  }
+	  /////////////////////////////////////////////////////////////////////////////////////////////////
+
+	  struct push_protocol_packet *response = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
+
+	  response->hdr.payload_length = sizeof(request->push_payload.stop_fetch);
+	  response->hdr.type = STOP_FETCH;
+	  response->push_payload.stop_fetch.hash_code = request->push_payload.symbol_data.hash_code;
+
+	  char *padding = (char *) malloc (SYMBOL_SIZE + PADDING);
+
+	  vector<boost::asio::mutable_buffer> buffer_write;
+
+	  buffer_write.push_back (buffer (response, sizeof(response->hdr) + response->hdr.payload_length));
+	  buffer_write.push_back (buffer (padding, SYMBOL_SIZE + PADDING));
+
+	  socket_udp.async_send_to (buffer_write, sender_endpoint_,
+				    boost::bind (&client::stop_fetch_request_written, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, response));
+
+	  decodings_mutex.unlock ();
+	} else {
+	  decodings_mutex.unlock ();
+	}
+	break;
+      }
+      case STOP_FETCH_OK:
+      {
+	greenColor ("client");
+	cout << ": STOP FETCH OK for " << request->push_payload.stop_fetch_ok.hash_code << endl;
+
+	decodings_mutex.lock ();
+	decodings_iterator decoding_iter = decodings.find (request->push_payload.stop_fetch_ok.hash_code);
+	if (decoding_iter != decodings.end ()) {
+	  delete decoding_iter->second;
+	  decodings.erase (decoding_iter);
+	  decodings_mutex.unlock ();
+
+	} else {
+	  redColor ("client");
+	  cout << ":Decoding state did not found!" << endl;
+	  decodings_mutex.unlock ();
+	}
+	break;
+      }
       default:
 	redColor ("client");
 	cout << ": fatal - unknown request" << endl;
@@ -500,6 +582,52 @@ client::symbol_request_written (const boost::system::error_code& err, std::size_
   }
   delete sym;
   free (request_symbol);
+}
+
+void
+client::send_data_request (uint32_t hash_code_)
+{
+
+  isDecoded_mutex.lock ();
+  isDecoded_iterator isDecoded_iter = isDecoded.find (hash_code_);
+
+  if (isDecoded_iter != isDecoded.end ()) {
+    struct push_protocol_packet *request = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
+
+    request->hdr.payload_length = sizeof(request->push_payload.send_next);
+    request->hdr.type = SEND_NEXT;
+    request->push_payload.start_storage_ok.hash_code = hash_code_;
+
+    char *padding = (char *) malloc (SYMBOL_SIZE + PADDING);
+
+    vector<boost::asio::mutable_buffer> buffer_write;
+
+    buffer_write.push_back (buffer (request, sizeof(request->hdr) + request->hdr.payload_length));
+    buffer_write.push_back (buffer (padding, SYMBOL_SIZE + PADDING));
+
+    socket_udp.async_send_to (buffer_write, sender_endpoint_,
+			      boost::bind (&client::send_data_request_written, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, request));
+
+    request_symbol_timer_.expires_at (request_symbol_timer_.expires_at () + boost::posix_time::milliseconds (50));
+    request_symbol_timer_.async_wait (bind (&client::send_data_request, this, hash_code_));
+    isDecoded_mutex.unlock ();
+  } else {
+    redColor ("client");
+    cout << "Timer Stopped!" << endl;
+    isDecoded_mutex.unlock ();
+  }
+}
+
+void
+client::send_data_request_written (const boost::system::error_code& err, std::size_t bytes_transferred, struct push_protocol_packet *request)
+{
+  if (!err) {
+
+  } else {
+    redColor ("client");
+    cout << ": send_data_request_written: " << err.message () << endl;
+  }
+  free (request);
 }
 
 void
