@@ -46,6 +46,7 @@ typedef std::map<uint32_t, encoding_state*>::iterator encodings_iterator;
 typedef std::map<uint32_t, decoding_state*>::iterator decodings_iterator;
 
 typedef std::map<uint32_t, bool>::iterator isDecoded_iterator;
+typedef std::map<uint32_t, boost::chrono::system_clock::time_point>::iterator dec_tp_iterator;
 
 typedef std::map<uint32_t, unsigned char *>::iterator blobs_to_encode_iterator;
 
@@ -203,6 +204,8 @@ public:
   std::map<uint32_t, decoding_state *> decodings;
   boost::mutex decodings_mutex;
   boost::asio::deadline_timer request_symbol_timer_;
+
+  std::map<uint32_t, boost::chrono::system_clock::time_point> dec_start_points;
 
   std::map<uint32_t, bool> isDecoded;
   boost::mutex isDecoded_mutex;

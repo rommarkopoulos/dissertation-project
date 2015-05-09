@@ -4,6 +4,7 @@ using namespace boost;
 using namespace asio;
 using namespace ip;
 using namespace std;
+using namespace chrono;
 
 data_server::data_server (string bind_address, uint16_t bind_port, string mds_address, uint16_t mds_port, size_t pool_size_) :
     pool_size_ (pool_size_), signals_ (io_service_), work_ptr_ (new io_service::work (io_service_)), local_endpoint_ (ip_v4::from_string (bind_address), bind_port), mds_endpoint_ (
@@ -147,6 +148,10 @@ data_server::handle_request (const boost::system::error_code& error, std::size_t
 
 	}
 
+	boost::chrono::system_clock::time_point start = chrono::system_clock::now();
+
+	dec_start_points.insert(make_pair(request->push_payload.start_fetch_ok.hash_code, start));
+
 	struct push_protocol_packet *response = (struct push_protocol_packet *) malloc (sizeof(struct push_protocol_packet));
 
 	response->hdr.payload_length = sizeof(request->push_payload.start_storage_ok);
@@ -167,8 +172,8 @@ data_server::handle_request (const boost::system::error_code& error, std::size_t
       }
       case SYMBOL_DATA:
       {
-//	greenColor ("data_server");
-//	cout << ": SYMBOL" << endl;
+	greenColor ("data_server");
+	cout << ": SYMBOL for " << request->push_payload.symbol_data.hash_code << endl;
 
 	/*NEED TO BE FREED*/
 	symbol *sym = new symbol ();
@@ -206,6 +211,21 @@ data_server::handle_request (const boost::system::error_code& error, std::size_t
 	  std::size_t d = decoded_blob_str_hash (decoded_blob_str);
 	  cout << "---------------------->" << d << endl;
 	  ////////////////////////////////////////////////////////////////////////////////////////////////
+
+	  boost::chrono::system_clock::time_point end = system_clock::now();
+
+	  boost::chrono::system_clock::duration drt;
+
+	  dec_tp_iterator dec_tp_iter = dec_start_points.find(request->push_payload.start_fetch.hash_code);
+
+	  drt = end - dec_tp_iter->second;
+
+	  greenColor("data_server");
+	  cout << " Decoded " << ((double) BLOB_SIZE / 1024) << " KBs in " << duration_cast<milliseconds> (drt).count () << " ms" << endl;
+	  greenColor("data_server");
+	  cout << " Required " << decoding_iter->second->symbol_counter << " symbols" << endl;
+	  greenColor("data_server");
+	  cout << " Average degree: " << decoding_iter->second->average_degree / decoding_iter->second->symbol_counter << endl;
 
 	  struct stored_data str_data;
 	  /*store data in DataServer*/
@@ -274,6 +294,7 @@ data_server::handle_request (const boost::system::error_code& error, std::size_t
 	cout << ": STOP_STORAGE_OK for " << request->push_payload.stop_storage_ok.hash_code << endl;
 
 	///////////////////////////////////// DELETE DECODING STATE ////////////////////////////////////
+	dec_tp_iterator dec_tp_iter = dec_start_points.find (request->push_payload.start_storage.hash_code);
 	decodings_mutex.lock ();
 	decodings_iterator decoding_iter = decodings.find (request->push_payload.start_storage.hash_code);
 	if (decoding_iter != decodings.end ()) {
@@ -281,6 +302,7 @@ data_server::handle_request (const boost::system::error_code& error, std::size_t
 	  decodings.erase (decoding_iter);
 	  greenColor ("data_server");
 	  cout << "Decoding State deleted!" << endl;
+	  dec_start_points.erase(dec_tp_iter);
 	  decodings_mutex.unlock ();
 	} else {
 	  decodings_mutex.unlock ();
@@ -502,7 +524,7 @@ data_server::send_data_request (uint32_t hash_code_)
     udp_socket_.async_send_to (buffer_write, sender_endpoint_,
 			       boost::bind (&data_server::send_data_request_written, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, request));
 
-    request_symbol_timer_.expires_at (request_symbol_timer_.expires_at () + boost::posix_time::milliseconds (50));
+    request_symbol_timer_.expires_at (request_symbol_timer_.expires_at () + boost::posix_time::milliseconds (300));
     request_symbol_timer_.async_wait (bind (&data_server::send_data_request, this, hash_code_));
     isDecoded_mutex.unlock ();
   } else {

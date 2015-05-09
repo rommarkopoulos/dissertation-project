@@ -366,11 +366,11 @@ data_server::handle_request (const boost::system::error_code& error, std::size_t
 	buffer_write.push_back (buffer (response, sizeof(response->hdr) + sizeof(response->push_payload.stop_fetch_ok)));
 	buffer_write.push_back (buffer (padding, SYMBOL_SIZE + PADDING));
 
-	yellowColor ("client");
-	cout << "r_s: sending to DataServer: " << sender_endpoint_.address ().to_string () << ":" << sender_endpoint_.port () << endl;
-	yellowColor ("client");
+	yellowColor ("data_server");
+	cout << "r_s: sending to Client: " << sender_endpoint_.address ().to_string () << ":" << sender_endpoint_.port () << endl;
+	yellowColor ("data_server");
 	cout << "r_s: request size: " << response->hdr.payload_length << " bytes." << endl;
-	yellowColor ("client");
+	yellowColor ("data_server");
 	cout << "r_s: request type: " << (int) response->hdr.type << endl;
 
 	udp_socket_.async_send_to (buffer_write, sender_endpoint_,
@@ -484,9 +484,9 @@ data_server::start_fetch_ok_request_written (const boost::system::error_code& er
 
 	  encodings_mutex.unlock ();
 	} else {
-	  greenColor ("client");
+	  greenColor ("data_server");
 	  cout << "Data of blob " << response->push_payload.start_storage.hash_code << " was succesfully send" << endl;
-	  greenColor ("client");
+	  greenColor ("data_server");
 	  cout << "Hash of data = ";
 	  greenColor (enc_hash);
 	  cout << endl;

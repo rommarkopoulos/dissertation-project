@@ -460,6 +460,10 @@ client::handle_request (const boost::system::error_code& err, std::size_t n, str
 
 	uint32_t hash_code_ = request->push_payload.start_fetch_ok.hash_code;
 
+//	boost::chrono::system_clock::time_point start = chrono::system_clock::now();
+//
+//	dec_start_points.insert(make_pair(request->push_payload.start_fetch_ok.hash_code, start));
+
 	request_symbol_timer_.async_wait (bind (&client::send_data_request, this, hash_code_));
 
 	break;
@@ -494,6 +498,17 @@ client::handle_request (const boost::system::error_code& err, std::size_t n, str
 	  cout << "---------------------->" << d << endl;
 	  ////////////////////////////////////////////////////////////////////////////////////////////////
 
+	  boost::chrono::system_clock::time_point end;
+	  boost::chrono::system_clock::duration drt;
+
+//	  dec_tp_iterator dec_tp_iter = dec_start_points.find(request->push_payload.start_fetch.hash_code);
+//
+//	  drt = end - dec_tp_iter->second;
+
+//	  greenColor("client");
+//	  cout << " Decoded " << (((double) (double) BLOB_SIZE / 1024) / 1024) << " MBs in " << duration_cast<milliseconds> (drt).count () << " ms" << endl;
+//	  cout << " Required " << decoding_iter->second->symbol_counter << " symbols" << endl;
+//	  cout << " Average degree: " << decoding_iter->second->average_degree / decoding_iter->second->symbol_counter << endl;
 	  greenColor ("client");
 	  cout << "Successfully fetched " << decoding_iter->second->blob_size << " bytes for " << request->push_payload.start_storage.hash_code << endl;
 	  string data_hash = sizeToString (d);
@@ -608,7 +623,7 @@ client::send_data_request (uint32_t hash_code_)
     socket_udp.async_send_to (buffer_write, sender_endpoint_,
 			      boost::bind (&client::send_data_request_written, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, request));
 
-    request_symbol_timer_.expires_at (request_symbol_timer_.expires_at () + boost::posix_time::milliseconds (50));
+    request_symbol_timer_.expires_at (request_symbol_timer_.expires_at () + boost::posix_time::milliseconds (300));
     request_symbol_timer_.async_wait (bind (&client::send_data_request, this, hash_code_));
     isDecoded_mutex.unlock ();
   } else {
